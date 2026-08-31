@@ -966,6 +966,26 @@ void main() {
     expect(controller.screen, AppScreen.coffeeResult);
     expect(controller.coffeeResult, isNotNull);
   });
+
+  testWidgets('navigating home during the reveal delay does not snap back to xemResult',
+      (tester) async {
+    // Regression test: _startRemoval's periodic timer self-cancels once it
+    // completes, then schedules a separate 400ms reveal callback. Before
+    // this fix, that callback wasn't tracked/cancelable, so navigating away
+    // during that window still snapped `screen` back to xemResult later.
+    final controller = AppStateController(random: const FixedRandom());
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1800)); // periodic timer completes, reveal scheduled
+
+    controller.goHome(); // navigate away during the 400ms reveal window
+    await tester.pump(const Duration(milliseconds: 400)); // let any stray timer fire
+
+    expect(controller.screen, AppScreen.home);
+  });
 }
 
 void unawaited(Future<void> future) {}
@@ -1087,6 +1107,7 @@ class AppStateController extends ChangeNotifier {
 
   final Random _random;
   Timer? _xemTimer;
+  Timer? _revealTimer;
 
   AppScreen screen = AppScreen.home;
   String name = '';
@@ -1108,12 +1129,14 @@ class AppStateController extends ChangeNotifier {
 
   void goHome() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.home;
     notifyListeners();
   }
 
   void goXemForm() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     xemPhotoPath = null;
     xemRejectionReason = null;
     screen = AppScreen.xemForm;
@@ -1165,6 +1188,7 @@ class AppStateController extends ChangeNotifier {
     const tickMs = 60;
     var ticks = 0;
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
       ticks += 1;
       final elapsedMs = ticks * tickMs;
@@ -1174,7 +1198,7 @@ class AppStateController extends ChangeNotifier {
       notifyListeners();
       if (frac >= 1.0) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        _revealTimer = Timer(const Duration(milliseconds: 400), () {
           revealedAt = _formatNow();
           screen = AppScreen.xemResult;
           notifyListeners();
@@ -1200,6 +1224,7 @@ class AppStateController extends ChangeNotifier {
   @override
   void dispose() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 }
@@ -1208,7 +1233,7 @@ class AppStateController extends ChangeNotifier {
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `flutter test test/state/app_state_controller_test.dart`
-Expected: PASS (4 tests). This runs inside `testWidgets`'s fake-async zone, so `tester.pump(duration)` advances the controller's `Future.delayed`/`Timer.periodic` calls deterministically — no real wall-clock waiting.
+Expected: PASS (5 tests). This runs inside `testWidgets`'s fake-async zone, so `tester.pump(duration)` advances the controller's `Timer`/`Timer.periodic` calls deterministically — no real wall-clock waiting.
 
 - [ ] **Step 6: Commit**
 
@@ -2558,6 +2583,23 @@ void main() {
     expect(controller.screen, AppScreen.coffeeResult);
     expect(controller.coffeeResult, isNotNull);
   });
+
+  testWidgets('navigating home during the reveal delay does not snap back to xemResult',
+      (tester) async {
+    final controller =
+        AppStateController(random: const FixedRandom(), faceChecker: _faceCheckerWith(_OneFace()));
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1800));
+
+    controller.goHome();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(controller.screen, AppScreen.home);
+  });
 }
 ```
 
@@ -2619,6 +2661,7 @@ class AppStateController extends ChangeNotifier {
   final Random _random;
   final FaceChecker _faceChecker;
   Timer? _xemTimer;
+  Timer? _revealTimer;
 
   AppScreen screen = AppScreen.home;
   String name = '';
@@ -2640,12 +2683,14 @@ class AppStateController extends ChangeNotifier {
 
   void goHome() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.home;
     notifyListeners();
   }
 
   void goXemForm() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     xemPhotoPath = null;
     xemRejectionReason = null;
     screen = AppScreen.xemForm;
@@ -2707,6 +2752,7 @@ class AppStateController extends ChangeNotifier {
     const tickMs = 60;
     var ticks = 0;
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
       ticks += 1;
       final elapsedMs = ticks * tickMs;
@@ -2716,7 +2762,7 @@ class AppStateController extends ChangeNotifier {
       notifyListeners();
       if (frac >= 1.0) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        _revealTimer = Timer(const Duration(milliseconds: 400), () {
           revealedAt = _formatNow();
           screen = AppScreen.xemResult;
           notifyListeners();
@@ -2742,6 +2788,7 @@ class AppStateController extends ChangeNotifier {
   @override
   void dispose() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 }
@@ -3298,6 +3345,22 @@ void main() {
     await tester.pump();
     expect(controller.screen, AppScreen.coffeeRejected);
   });
+
+  testWidgets('navigating home during the reveal delay does not snap back to xemResult',
+      (tester) async {
+    final controller = buildController();
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1800));
+
+    controller.goHome();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(controller.screen, AppScreen.home);
+  });
 }
 ```
 
@@ -3356,6 +3419,7 @@ class AppStateController extends ChangeNotifier {
   final FaceChecker _faceChecker;
   final CupChecker _cupChecker;
   Timer? _xemTimer;
+  Timer? _revealTimer;
 
   AppScreen screen = AppScreen.home;
   String name = '';
@@ -3377,12 +3441,14 @@ class AppStateController extends ChangeNotifier {
 
   void goHome() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.home;
     notifyListeners();
   }
 
   void goXemForm() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     xemPhotoPath = null;
     xemRejectionReason = null;
     screen = AppScreen.xemForm;
@@ -3444,6 +3510,7 @@ class AppStateController extends ChangeNotifier {
     const tickMs = 60;
     var ticks = 0;
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
       ticks += 1;
       final elapsedMs = ticks * tickMs;
@@ -3453,7 +3520,7 @@ class AppStateController extends ChangeNotifier {
       notifyListeners();
       if (frac >= 1.0) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        _revealTimer = Timer(const Duration(milliseconds: 400), () {
           revealedAt = _formatNow();
           screen = AppScreen.xemResult;
           notifyListeners();
@@ -3486,6 +3553,7 @@ class AppStateController extends ChangeNotifier {
   @override
   void dispose() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 }
