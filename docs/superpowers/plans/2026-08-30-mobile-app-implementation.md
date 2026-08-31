@@ -986,6 +986,29 @@ void main() {
 
     expect(controller.screen, AppScreen.home);
   });
+
+  testWidgets("a second submitXem call cancels a still-animating first call's timers",
+      (tester) async {
+    // Regression test: without cancelling _xemTimer/_revealTimer at the top
+    // of submitXem(), a first call's orphaned reveal timer could still fire
+    // later and resurrect its stale xemResult over a second, still-loading
+    // call's state.
+    final controller = AppStateController(random: const FixedRandom());
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem()); // call A
+    await tester.pump(const Duration(milliseconds: 1500)); // A reaches xemRemoving
+    await tester.pump(const Duration(milliseconds: 800)); // A is midway through removal
+
+    unawaited(controller.submitXem()); // call B, re-submits while A is still animating
+    expect(controller.screen, AppScreen.xemLoading);
+
+    // Advance past when A's now-cancelled reveal would have fired (had it
+    // not been cancelled) but before B's own 1500ms loading delay elapses.
+    await tester.pump(const Duration(milliseconds: 1450));
+    expect(controller.screen, AppScreen.xemLoading);
+  });
 }
 
 void unawaited(Future<void> future) {}
@@ -1166,6 +1189,11 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> submitXem() async {
     if (xemPhotoPath == null) return;
+    // A second submitXem() call while a first is still animating must not
+    // let the first call's orphaned timers resurrect its (stale) result
+    // over this call's state later — cancel them before proceeding.
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.xemLoading;
     notifyListeners();
 
@@ -1233,7 +1261,7 @@ class AppStateController extends ChangeNotifier {
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `flutter test test/state/app_state_controller_test.dart`
-Expected: PASS (5 tests). This runs inside `testWidgets`'s fake-async zone, so `tester.pump(duration)` advances the controller's `Timer`/`Timer.periodic` calls deterministically — no real wall-clock waiting.
+Expected: PASS (6 tests). This runs inside `testWidgets`'s fake-async zone, so `tester.pump(duration)` advances the controller's `Timer`/`Timer.periodic` calls deterministically — no real wall-clock waiting.
 
 - [ ] **Step 6: Commit**
 
@@ -2600,6 +2628,24 @@ void main() {
 
     expect(controller.screen, AppScreen.home);
   });
+
+  testWidgets("a second submitXem call cancels a still-animating first call's timers",
+      (tester) async {
+    final controller =
+        AppStateController(random: const FixedRandom(), faceChecker: _faceCheckerWith(_OneFace()));
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 800));
+
+    unawaited(controller.submitXem());
+    expect(controller.screen, AppScreen.xemLoading);
+
+    await tester.pump(const Duration(milliseconds: 1450));
+    expect(controller.screen, AppScreen.xemLoading);
+  });
 }
 ```
 
@@ -2720,6 +2766,11 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> submitXem() async {
     if (xemPhotoPath == null) return;
+    // A second submitXem() call while a first is still animating must not
+    // let the first call's orphaned timers resurrect its (stale) result
+    // over this call's state later — cancel them before proceeding.
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.xemLoading;
     notifyListeners();
 
@@ -3361,6 +3412,23 @@ void main() {
 
     expect(controller.screen, AppScreen.home);
   });
+
+  testWidgets("a second submitXem call cancels a still-animating first call's timers",
+      (tester) async {
+    final controller = buildController();
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 800));
+
+    unawaited(controller.submitXem());
+    expect(controller.screen, AppScreen.xemLoading);
+
+    await tester.pump(const Duration(milliseconds: 1450));
+    expect(controller.screen, AppScreen.xemLoading);
+  });
 }
 ```
 
@@ -3478,6 +3546,11 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> submitXem() async {
     if (xemPhotoPath == null) return;
+    // A second submitXem() call while a first is still animating must not
+    // let the first call's orphaned timers resurrect its (stale) result
+    // over this call's state later — cancel them before proceeding.
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.xemLoading;
     notifyListeners();
 
