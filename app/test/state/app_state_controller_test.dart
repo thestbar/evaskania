@@ -87,6 +87,37 @@ void main() {
 
     expect(controller.screen, AppScreen.home);
   });
+
+  testWidgets("a second submitXem call cancels a still-animating first call's timers",
+      (tester) async {
+    // Regression test: without cancelling _xemTimer/_revealTimer at the top
+    // of submitXem(), a first call's orphaned reveal timer could still fire
+    // later and resurrect its stale xemResult over a second, still-loading
+    // call's state.
+    final controller = AppStateController(random: const FixedRandom());
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem()); // call A
+    await tester.pump(const Duration(milliseconds: 1500)); // A reaches xemRemoving
+    await tester.pump(const Duration(milliseconds: 800)); // A is midway through removal
+
+    unawaited(controller.submitXem()); // call B, re-submits while A is still animating
+    expect(controller.screen, AppScreen.xemLoading);
+
+    // Advance past when A's now-cancelled reveal would have fired (had it
+    // not been cancelled) but before B's own 1500ms loading delay elapses.
+    await tester.pump(const Duration(milliseconds: 1450));
+    expect(controller.screen, AppScreen.xemLoading);
+
+    // Drain B's own remaining timers (the rest of its loading delay, its
+    // full removal animation, and its reveal delay) so no fake timers are
+    // left pending when the test body returns — AutomatedTestWidgetsFlutter
+    // Binding asserts !timersPending after every testWidgets body, and a
+    // bare, unreferenced Future.delayed's Timer stays registered in the
+    // FakeAsync zone until it actually fires.
+    await tester.pump(const Duration(milliseconds: 2300));
+  });
 }
 
 void unawaited(Future<void> future) {}

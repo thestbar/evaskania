@@ -70,6 +70,11 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> submitXem() async {
     if (xemPhotoPath == null) return;
+    // A second submitXem() call while a first is still animating must not
+    // let the first call's orphaned timers resurrect its (stale) result
+    // over this call's state later — cancel them before proceeding.
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.xemLoading;
     notifyListeners();
 
