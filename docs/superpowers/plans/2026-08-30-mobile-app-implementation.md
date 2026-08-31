@@ -1008,6 +1008,14 @@ void main() {
     // not been cancelled) but before B's own 1500ms loading delay elapses.
     await tester.pump(const Duration(milliseconds: 1450));
     expect(controller.screen, AppScreen.xemLoading);
+
+    // Drain B's own remaining timers (the rest of its loading delay, its
+    // full removal animation, and its reveal delay) so no fake timers are
+    // left pending when the test body returns — AutomatedTestWidgetsFlutter
+    // Binding asserts !timersPending after every testWidgets body, and a
+    // bare, unreferenced Future.delayed's Timer stays registered in the
+    // FakeAsync zone until it actually fires.
+    await tester.pump(const Duration(milliseconds: 2300));
   });
 }
 
@@ -2645,6 +2653,14 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1450));
     expect(controller.screen, AppScreen.xemLoading);
+
+    // Drain B's own remaining timers (the rest of its loading delay, its
+    // full removal animation, and its reveal delay) so no fake timers are
+    // left pending when the test body returns — AutomatedTestWidgetsFlutter
+    // Binding asserts !timersPending after every testWidgets body, and a
+    // bare, unreferenced Future.delayed's Timer stays registered in the
+    // FakeAsync zone until it actually fires.
+    await tester.pump(const Duration(milliseconds: 2300));
   });
 }
 ```
@@ -3428,6 +3444,14 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 1450));
     expect(controller.screen, AppScreen.xemLoading);
+
+    // Drain B's own remaining timers (the rest of its loading delay, its
+    // full removal animation, and its reveal delay) so no fake timers are
+    // left pending when the test body returns — AutomatedTestWidgetsFlutter
+    // Binding asserts !timersPending after every testWidgets body, and a
+    // bare, unreferenced Future.delayed's Timer stays registered in the
+    // FakeAsync zone until it actually fires.
+    await tester.pump(const Duration(milliseconds: 2300));
   });
 }
 ```
