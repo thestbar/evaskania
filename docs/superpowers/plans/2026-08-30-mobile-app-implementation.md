@@ -1347,7 +1347,7 @@ void main() {
       ..xemPct = 23;
 
     await tester.pumpWidget(MaterialApp(home: XemRemovingScreen(controller: controller)));
-    expect(find.text('Βρέθηκε'), findsOneWidget);
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
     expect(find.text('Ελαφρύ ματάκι από ζήλια'), findsOneWidget);
     expect(find.textContaining('%'), findsWidgets);
   });
@@ -1987,7 +1987,7 @@ void main() {
     expect(find.text('Η γιαγιά συγκεντρώνεται…'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 1500));
-    expect(find.text('Βρέθηκε'), findsOneWidget);
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
 
     await tester.pump(const Duration(milliseconds: 1800));
     await tester.pump(const Duration(milliseconds: 400));
@@ -2991,7 +2991,7 @@ void main() {
 
     await tester.pump(); // the face check itself resolves on a microtask
     await tester.pump(const Duration(milliseconds: 1500));
-    expect(find.text('Βρέθηκε'), findsOneWidget);
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
 
     await tester.pump(const Duration(milliseconds: 1800));
     await tester.pump(const Duration(milliseconds: 400));
@@ -3828,7 +3828,7 @@ void main() {
 
     await tester.pump(); // the face check itself resolves on a microtask
     await tester.pump(const Duration(milliseconds: 1500));
-    expect(find.text('Βρέθηκε'), findsOneWidget);
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
 
     await tester.pump(const Duration(milliseconds: 1800));
     await tester.pump(const Duration(milliseconds: 400));
