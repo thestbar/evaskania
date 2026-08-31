@@ -11,6 +11,7 @@ class AppStateController extends ChangeNotifier {
 
   final Random _random;
   Timer? _xemTimer;
+  Timer? _revealTimer;
 
   AppScreen screen = AppScreen.home;
   String name = '';
@@ -32,12 +33,14 @@ class AppStateController extends ChangeNotifier {
 
   void goHome() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.home;
     notifyListeners();
   }
 
   void goXemForm() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     xemPhotoPath = null;
     xemRejectionReason = null;
     screen = AppScreen.xemForm;
@@ -87,8 +90,20 @@ class AppStateController extends ChangeNotifier {
     final total = affliction.startPct;
     const totalDurationMs = 1800;
     const tickMs = 60;
+    // Progress is driven by counting periodic-timer ticks rather than reading
+    // DateTime.now(): flutter_test's FakeAsync zone fakes Timer/Future but has
+    // no hook to fake the wall clock, so a DateTime.now()-based elapsed-time
+    // calculation never advances under tester.pump() (see the A5 report for
+    // the bug this replaced). The trade-off: progress now tracks how many
+    // times the periodic timer actually fires, not true wall-clock elapsed
+    // time, so OS timer throttling/coalescing (e.g. app backgrounded then
+    // resumed) could stretch this past 1800ms of real time, unlike a
+    // wall-clock approach which would self-correct. Acceptable here since
+    // this is a decorative, low-stakes loading animation — don't revert to
+    // DateTime.now() without understanding why it was changed.
     var ticks = 0;
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
       ticks += 1;
       final elapsedMs = ticks * tickMs;
@@ -98,7 +113,7 @@ class AppStateController extends ChangeNotifier {
       notifyListeners();
       if (frac >= 1.0) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        _revealTimer = Timer(const Duration(milliseconds: 400), () {
           revealedAt = _formatNow();
           screen = AppScreen.xemResult;
           notifyListeners();
@@ -124,6 +139,7 @@ class AppStateController extends ChangeNotifier {
   @override
   void dispose() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 }

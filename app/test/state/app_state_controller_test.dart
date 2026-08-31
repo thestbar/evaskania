@@ -71,6 +71,22 @@ void main() {
     expect(controller.screen, AppScreen.coffeeResult);
     expect(controller.coffeeResult, isNotNull);
   });
+
+  testWidgets('navigating home during the reveal delay does not snap back to xemResult',
+      (tester) async {
+    final controller = AppStateController(random: const FixedRandom());
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1800)); // periodic timer completes, reveal scheduled
+
+    controller.goHome(); // navigate away during the 400ms reveal window
+    await tester.pump(const Duration(milliseconds: 400)); // let any stray timer fire
+
+    expect(controller.screen, AppScreen.home);
+  });
 }
 
 void unawaited(Future<void> future) {}
