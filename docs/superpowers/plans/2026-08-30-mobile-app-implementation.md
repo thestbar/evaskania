@@ -1243,8 +1243,6 @@ import 'package:evaskania/screens/xem_removing_screen.dart';
 import 'package:evaskania/screens/xem_result_screen.dart';
 import 'package:evaskania/state/app_state_controller.dart';
 
-void unawaited(Future<void> future) {}
-
 void main() {
   testWidgets('XemFormScreen shows fields and a disabled button with no photo', (tester) async {
     final controller = AppStateController();
@@ -1276,24 +1274,29 @@ void main() {
   });
 
   testWidgets('XemRemovingScreen shows the affliction and percentage', (tester) async {
-    final controller = AppStateController()..setXemPhoto('/tmp/a.jpg');
-    unawaited(controller.submitXem());
-    await tester.pump(const Duration(milliseconds: 1500));
+    // Sets controller fields directly rather than driving them through
+    // submitXem()/a timer — this screen only reads current state, and this
+    // keeps the test decoupled from Tasks B2/C2's later changes to submitXem
+    // (which start awaiting a real detection check before this point).
+    final controller = AppStateController()
+      ..xemFound = 'Ελαφρύ ματάκι από ζήλια'
+      ..xemNote = 'Κάποιος ζήλεψε κάτι μικρό — τα μαλλιά σου, μάλλον.'
+      ..xemPct = 23;
 
     await tester.pumpWidget(MaterialApp(home: XemRemovingScreen(controller: controller)));
     expect(find.text('Βρέθηκε'), findsOneWidget);
-    expect(find.text(controller.xemFound), findsOneWidget);
+    expect(find.text('Ελαφρύ ματάκι από ζήλια'), findsOneWidget);
     expect(find.textContaining('%'), findsWidgets);
   });
 
   testWidgets('XemResultScreen shows the display name and a retry button', (tester) async {
+    // Same rationale as above: set state directly instead of calling
+    // submitXem(), so this test stays valid after Tasks B2/C2.
     final controller = AppStateController()
-      ..setXemPhoto('/tmp/a.jpg')
-      ..setName('Μαρία');
-    unawaited(controller.submitXem());
-    await tester.pump(const Duration(milliseconds: 1500));
-    await tester.pump(const Duration(milliseconds: 1800));
-    await tester.pump(const Duration(milliseconds: 400));
+      ..setName('Μαρία')
+      ..xemFound = 'Βαρύ μάτι από σχόλιο'
+      ..xemStartPct = 78
+      ..revealedAt = '11:26 μ.μ.';
 
     await tester.pumpWidget(MaterialApp(home: XemResultScreen(controller: controller)));
     expect(find.textContaining('Μαρία, είσαι καθαρός/ή πια!'), findsOneWidget);
@@ -1633,9 +1636,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:evaskania/screens/coffee_form_screen.dart';
 import 'package:evaskania/screens/coffee_loading_screen.dart';
 import 'package:evaskania/screens/coffee_result_screen.dart';
+import 'package:evaskania/data/coffee_verdicts.dart';
 import 'package:evaskania/state/app_state_controller.dart';
-
-void unawaited(Future<void> future) {}
 
 void main() {
   testWidgets('CoffeeFormScreen shows the photo slot and a disabled button with no photo', (tester) async {
@@ -1660,16 +1662,20 @@ void main() {
   });
 
   testWidgets('CoffeeResultScreen shows the verdict symbols and quote', (tester) async {
-    final controller = AppStateController()..setCoffeePhoto('/tmp/cup.jpg');
-    unawaited(controller.submitCoffee());
-    await tester.pump(const Duration(milliseconds: 2200));
+    // Sets coffeeResult directly rather than driving it through
+    // submitCoffee() — this screen only reads current state, and this keeps
+    // the test decoupled from Task C2's later change to submitCoffee (which
+    // starts awaiting a real detection check before this point).
+    const verdict = CoffeeVerdict(symbols: ['Πουλί', 'Κουκκίδες'], quote: 'Δοκιμαστικό απόσπασμα.');
+    final controller = AppStateController()
+      ..coffeeResult = verdict
+      ..revealedAt = '11:26 μ.μ.';
 
     await tester.pumpWidget(MaterialApp(home: CoffeeResultScreen(controller: controller)));
-    final result = controller.coffeeResult!;
-    for (final symbol in result.symbols) {
+    for (final symbol in verdict.symbols) {
       expect(find.text(symbol), findsOneWidget);
     }
-    expect(find.textContaining(result.quote), findsOneWidget);
+    expect(find.textContaining(verdict.quote), findsOneWidget);
     expect(find.text('Διάβασε άλλο φλιτζάνι'), findsOneWidget);
   });
 }
@@ -2406,6 +2412,7 @@ git commit -m "Add FaceChecker with a fakeable detection/size-reading seam"
 - Create: `app/lib/screens/xem_rejected_screen.dart`
 - Test: `app/test/screens/xem_rejected_screen_test.dart`
 - Modify: `app/lib/screens/app_shell.dart` (route `AppScreen.xemRejected` to the new screen; `AppScreen.coffeeRejected` keeps using `_RejectedFallback` until Task C2)
+- Modify: `app/test/screens/app_shell_test.dart` (its Ξεμάτιασμα end-to-end test drives `submitXem` by tapping through the UI — it now needs a fake `FaceChecker` injected so it doesn't hit the real ML Kit platform channel)
 
 **Interfaces:**
 - Consumes: `FaceChecker`, `FaceCheckResult` (B1).
@@ -2806,20 +2813,122 @@ In `app/lib/screens/app_shell.dart`, add `import 'xem_rejected_screen.dart';` an
 
 (replacing the old single `AppScreen.xemRejected || AppScreen.coffeeRejected => _RejectedFallback(controller: controller),` line). `_RejectedFallback` stays for now — Task C2 replaces the `coffeeRejected` arm and then deletes `_RejectedFallback` entirely.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Modify `app_shell_test.dart`**
+
+Its Ξεμάτιασμα flow test taps through to `submitXem`, which now awaits a real `FaceChecker` by default — inject a fake so it doesn't hit the ML Kit platform channel. Replace the full contents of `app/test/screens/app_shell_test.dart` with:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:evaskania/detection/face_checker.dart';
+import 'package:evaskania/screens/app_shell.dart';
+import 'package:evaskania/state/app_state_controller.dart';
+
+Future<String?> _fakePick(ImageSource source) async => '/tmp/fake.jpg';
+
+class _OneFace implements FaceDetectionSource {
+  @override
+  Future<List<Rect>> detectFaceBoxes(String imagePath) async =>
+      [const Rect.fromLTWH(0, 0, 400, 400)];
+}
+
+class _FixedSize implements ImageSizeReader {
+  @override
+  Future<Size> readSize(String imagePath) async => const Size(1000, 1000);
+}
+
+FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeReader: _FixedSize());
+
+void main() {
+  testWidgets('home shows the masthead and both ritual cards', (tester) async {
+    final controller = AppStateController();
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+    expect(find.text('Ξεμάτιασμα'), findsOneWidget);
+    expect(find.text('Ο Καφές'), findsOneWidget);
+  });
+
+  testWidgets('full Ξεμάτιασμα flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(faceChecker: _okFaceChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ξεμάτιασμα'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ρίξε τη φωτογραφία εδώ'), findsOneWidget);
+
+    await tester.tap(find.text('Ρίξε τη φωτογραφία εδώ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ξεκίνα το ξεμάτιασμα'));
+    await tester.pump();
+    expect(find.text('Η γιαγιά συγκεντρώνεται…'), findsOneWidget);
+
+    await tester.pump(); // the face check itself resolves on a microtask
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.text('Βρέθηκε'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Ξεμάτιασε άλλον'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+
+  testWidgets('full Ο Καφές flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(faceChecker: _okFaceChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ο Καφές'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ανέβασε το γυρισμένο φλιτζάνι'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Δωσ' μου το φλιτζάνι"));
+    await tester.pump();
+    expect(find.text('Η γιαγιά διαβάζει…'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 2200));
+    expect(find.text('Διάβασε άλλο φλιτζάνι'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+}
+```
+
+(`Rect` and `Size` both come from `material.dart`'s re-export of `dart:ui`, same as in the `face_checker_test.dart` pattern from Task B1. The coffee flow test doesn't need a `cupChecker` override yet — `submitCoffee` doesn't call any checker until Task C2.)
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `flutter test`
-Expected: PASS — every test in the suite, including the modified controller tests and the new rejected-screen tests.
+Expected: PASS — every test in the suite, including the modified controller tests, the new rejected-screen tests, and the re-fitted `app_shell_test.dart`.
 
-- [ ] **Step 7: Static check**
+- [ ] **Step 8: Static check**
 
 Run: `flutter analyze`
 Expected: "No issues found!"
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/xem_rejected_screen.dart app/test/screens/xem_rejected_screen_test.dart app/lib/screens/app_shell.dart
+git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/xem_rejected_screen.dart app/test/screens/xem_rejected_screen_test.dart app/lib/screens/app_shell.dart app/test/screens/app_shell_test.dart
 git commit -m "Wire FaceChecker into Ξεμάτιασμα submit flow with rejection screen"
 ```
 
@@ -3012,6 +3121,7 @@ git commit -m "Add CupChecker using ML Kit image labeling"
 - Create: `app/lib/screens/coffee_rejected_screen.dart`
 - Test: `app/test/screens/coffee_rejected_screen_test.dart`
 - Modify: `app/lib/screens/app_shell.dart` (route `AppScreen.coffeeRejected` to the new screen; delete `_RejectedFallback`, now fully unused)
+- Modify: `app/test/screens/app_shell_test.dart` (its Ο Καφές end-to-end test drives `submitCoffee` by tapping through the UI — it now needs a fake `CupChecker` injected too, alongside the `FaceChecker` fake Task B2 already added)
 
 **Interfaces:**
 - Consumes: `CupChecker`, `CupCheckResult` (C1).
@@ -3479,12 +3589,121 @@ class AppShell extends StatelessWidget {
 
 (`_RejectedFallback` and the now-unused `app_buttons.dart` import are gone — every `AppScreen` case has its real screen.)
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Modify `app_shell_test.dart`**
+
+Its Ο Καφές flow test taps through to `submitCoffee`, which now awaits a real `CupChecker` by default — inject a fake, alongside the `FaceChecker` fake Task B2 already added. Replace the full contents of `app/test/screens/app_shell_test.dart` with:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:evaskania/detection/cup_checker.dart';
+import 'package:evaskania/detection/face_checker.dart';
+import 'package:evaskania/screens/app_shell.dart';
+import 'package:evaskania/state/app_state_controller.dart';
+
+Future<String?> _fakePick(ImageSource source) async => '/tmp/fake.jpg';
+
+class _OneFace implements FaceDetectionSource {
+  @override
+  Future<List<Rect>> detectFaceBoxes(String imagePath) async =>
+      [const Rect.fromLTWH(0, 0, 400, 400)];
+}
+
+class _FixedSize implements ImageSizeReader {
+  @override
+  Future<Size> readSize(String imagePath) async => const Size(1000, 1000);
+}
+
+class _CupLabel implements ImageLabelSource {
+  @override
+  Future<List<MapEntry<String, double>>> labelImage(String imagePath) async =>
+      [const MapEntry('Cup', 0.9)];
+}
+
+FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeReader: _FixedSize());
+CupChecker _okCupChecker() => CupChecker(labelSource: _CupLabel());
+
+void main() {
+  testWidgets('home shows the masthead and both ritual cards', (tester) async {
+    final controller = AppStateController();
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+    expect(find.text('Ξεμάτιασμα'), findsOneWidget);
+    expect(find.text('Ο Καφές'), findsOneWidget);
+  });
+
+  testWidgets('full Ξεμάτιασμα flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(faceChecker: _okFaceChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ξεμάτιασμα'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ρίξε τη φωτογραφία εδώ'), findsOneWidget);
+
+    await tester.tap(find.text('Ρίξε τη φωτογραφία εδώ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ξεκίνα το ξεμάτιασμα'));
+    await tester.pump();
+    expect(find.text('Η γιαγιά συγκεντρώνεται…'), findsOneWidget);
+
+    await tester.pump(); // the face check itself resolves on a microtask
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.text('Βρέθηκε'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Ξεμάτιασε άλλον'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+
+  testWidgets('full Ο Καφές flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(cupChecker: _okCupChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ο Καφές'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ανέβασε το γυρισμένο φλιτζάνι'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Δωσ' μου το φλιτζάνι"));
+    await tester.pump();
+    expect(find.text('Η γιαγιά διαβάζει…'), findsOneWidget);
+
+    await tester.pump(); // the cup check itself resolves on a microtask
+    await tester.pump(const Duration(milliseconds: 2200));
+    expect(find.text('Διάβασε άλλο φλιτζάνι'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+}
+```
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `flutter test`
-Expected: PASS — the entire suite, including the modified controller tests and the new coffee-rejected screen tests.
+Expected: PASS — the entire suite, including the modified controller tests, the new coffee-rejected screen tests, and the re-fitted `app_shell_test.dart`.
 
-- [ ] **Step 7: Full static + build check**
+- [ ] **Step 8: Full static + build check**
 
 ```bash
 cd app
@@ -3495,10 +3714,10 @@ flutter build ios --no-codesign --simulator
 
 Expected: no analyzer issues, both builds succeed.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/coffee_rejected_screen.dart app/test/screens/coffee_rejected_screen_test.dart app/lib/screens/app_shell.dart
+git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/coffee_rejected_screen.dart app/test/screens/coffee_rejected_screen_test.dart app/lib/screens/app_shell.dart app/test/screens/app_shell_test.dart
 git commit -m "Wire CupChecker into Ο Καφές submit flow with rejection screen (milestone C complete)"
 ```
 
