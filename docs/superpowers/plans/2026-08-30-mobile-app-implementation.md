@@ -1162,10 +1162,12 @@ class AppStateController extends ChangeNotifier {
 
     final total = affliction.startPct;
     const totalDurationMs = 1800;
-    final t0 = DateTime.now();
+    const tickMs = 60;
+    var ticks = 0;
     _xemTimer?.cancel();
-    _xemTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      final elapsedMs = DateTime.now().difference(t0).inMilliseconds;
+    _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
+      ticks += 1;
+      final elapsedMs = ticks * tickMs;
       final frac = (elapsedMs / totalDurationMs).clamp(0.0, 1.0);
       xemPct = (total * (1 - frac)).round();
       dropsCleared = frac >= 0.999 ? 3 : (frac * 3).floor();
@@ -2702,10 +2704,12 @@ class AppStateController extends ChangeNotifier {
 
     final total = affliction.startPct;
     const totalDurationMs = 1800;
-    final t0 = DateTime.now();
+    const tickMs = 60;
+    var ticks = 0;
     _xemTimer?.cancel();
-    _xemTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      final elapsedMs = DateTime.now().difference(t0).inMilliseconds;
+    _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
+      ticks += 1;
+      final elapsedMs = ticks * tickMs;
       final frac = (elapsedMs / totalDurationMs).clamp(0.0, 1.0);
       xemPct = (total * (1 - frac)).round();
       dropsCleared = frac >= 0.999 ? 3 : (frac * 3).floor();
@@ -3437,10 +3441,12 @@ class AppStateController extends ChangeNotifier {
 
     final total = affliction.startPct;
     const totalDurationMs = 1800;
-    final t0 = DateTime.now();
+    const tickMs = 60;
+    var ticks = 0;
     _xemTimer?.cancel();
-    _xemTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      final elapsedMs = DateTime.now().difference(t0).inMilliseconds;
+    _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
+      ticks += 1;
+      final elapsedMs = ticks * tickMs;
       final frac = (elapsedMs / totalDurationMs).clamp(0.0, 1.0);
       xemPct = (total * (1 - frac)).round();
       dropsCleared = frac >= 0.999 ? 3 : (frac * 3).floor();
