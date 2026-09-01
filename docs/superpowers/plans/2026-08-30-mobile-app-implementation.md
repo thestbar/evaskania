@@ -3714,6 +3714,17 @@ class AppStateController extends ChangeNotifier {
     final total = affliction.startPct;
     const totalDurationMs = 1800;
     const tickMs = 60;
+    // Progress is driven by counting periodic-timer ticks rather than reading
+    // DateTime.now(): flutter_test's FakeAsync zone fakes Timer/Future but has
+    // no hook to fake the wall clock, so a DateTime.now()-based elapsed-time
+    // calculation never advances under tester.pump() (see the A5 report for
+    // the bug this replaced). The trade-off: progress now tracks how many
+    // times the periodic timer actually fires, not true wall-clock elapsed
+    // time, so OS timer throttling/coalescing (e.g. app backgrounded then
+    // resumed) could stretch this past 1800ms of real time, unlike a
+    // wall-clock approach which would self-correct. Acceptable here since
+    // this is a decorative, low-stakes loading animation — don't revert to
+    // DateTime.now() without understanding why it was changed.
     var ticks = 0;
     _xemTimer?.cancel();
     _revealTimer?.cancel();
