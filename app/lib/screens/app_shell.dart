@@ -9,6 +9,7 @@ import 'coffee_result_screen.dart';
 import 'home_screen.dart';
 import 'xem_form_screen.dart';
 import 'xem_loading_screen.dart';
+import 'xem_rejected_screen.dart';
 import 'xem_removing_screen.dart';
 import 'xem_result_screen.dart';
 
@@ -31,8 +32,8 @@ class AppShell extends StatelessWidget {
               AppScreen.xemLoading => const XemLoadingScreen(),
               AppScreen.xemRemoving => XemRemovingScreen(controller: controller),
               AppScreen.xemResult => XemResultScreen(controller: controller),
-              AppScreen.xemRejected || AppScreen.coffeeRejected =>
-                _RejectedFallback(controller: controller),
+              AppScreen.xemRejected => XemRejectedScreen(controller: controller),
+              AppScreen.coffeeRejected => _RejectedFallback(controller: controller),
               AppScreen.coffeeForm => CoffeeFormScreen(controller: controller, pickImage: pickImage),
               AppScreen.coffeeLoading => const CoffeeLoadingScreen(),
               AppScreen.coffeeResult => CoffeeResultScreen(controller: controller),
@@ -44,11 +45,10 @@ class AppShell extends StatelessWidget {
   }
 }
 
-/// Temporary stand-in for [AppScreen.xemRejected] / [AppScreen.coffeeRejected].
-/// Both states are unreachable until Tasks B2 and C2 wire the real detection
-/// checks into [AppStateController]; those tasks replace this switch arm
-/// with the real `XemRejectedScreen` / `CoffeeRejectedScreen` and delete
-/// this class once both are in place.
+/// Temporary stand-in for [AppScreen.coffeeRejected], unreachable until
+/// Task C2 wires the real detection check into [AppStateController]'s
+/// `submitCoffee`; that task replaces this switch arm with the real
+/// `CoffeeRejectedScreen` and deletes this class.
 class _RejectedFallback extends StatelessWidget {
   const _RejectedFallback({required this.controller});
   final AppStateController controller;

@@ -2,17 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:evaskania/detection/face_checker.dart';
 import 'package:evaskania/screens/app_shell.dart';
 import 'package:evaskania/state/app_state_controller.dart';
 
 Future<String?> _fakePick(ImageSource source) async => '/tmp/fake.jpg';
 
+class _OneFace implements FaceDetectionSource {
+  @override
+  Future<List<Rect>> detectFaceBoxes(String imagePath) async =>
+      [const Rect.fromLTWH(0, 0, 400, 400)];
+}
+
+class _FixedSize implements ImageSizeReader {
+  @override
+  Future<Size> readSize(String imagePath) async => const Size(1000, 1000);
+}
+
+FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeReader: _FixedSize());
+
 void main() {
-  // HomeScreen reads controller.today, which formats via DateFormat('d MMM',
-  // 'el'); that throws LocaleDataException unless the 'el' locale data has
-  // been loaded first (see app_state_controller_test.dart for the same
-  // pattern). main.dart does this in main() before runApp(), but these
-  // tests pump AppShell directly, so it must be done here too.
   setUpAll(() async {
     await initializeDateFormatting('el', null);
   });
@@ -29,7 +38,7 @@ void main() {
 
   testWidgets('full Ξεμάτιασμα flow: home -> form -> pick -> submit -> result -> home',
       (tester) async {
-    final controller = AppStateController();
+    final controller = AppStateController(faceChecker: _okFaceChecker());
     await tester.pumpWidget(
       MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
     );
@@ -47,10 +56,9 @@ void main() {
     await tester.pump();
     expect(find.text('Η γιαγιά συγκεντρώνεται…'), findsOneWidget);
 
+    await tester.pump(); // the face check itself resolves on a microtask
     await tester.pump(const Duration(milliseconds: 1500));
-    // CardKicker uppercases its text (see xem_screens_test.dart), so the
-    // rendered kicker is 'ΒΡΈΘΗΚΕ', not 'Βρέθηκε'.
-    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget);
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
 
     await tester.pump(const Duration(milliseconds: 1800));
     await tester.pump(const Duration(milliseconds: 400));
@@ -63,7 +71,7 @@ void main() {
 
   testWidgets('full Ο Καφές flow: home -> form -> pick -> submit -> result -> home',
       (tester) async {
-    final controller = AppStateController();
+    final controller = AppStateController(faceChecker: _okFaceChecker());
     await tester.pumpWidget(
       MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
     );
