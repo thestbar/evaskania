@@ -56,4 +56,20 @@ void main() {
     );
     expect(await checker.check('/tmp/a.jpg'), FaceCheckResult.ok);
   });
+
+  test('a face at exactly the 5% area threshold counts as significant', () async {
+    final checker = FaceChecker(
+      detectionSource: _FakeDetectionSource([const Rect.fromLTWH(0, 0, 250, 200)]), // 50,000 / 1,000,000 = exactly 5%
+      sizeReader: _FakeSizeReader(imageSize),
+    );
+    expect(await checker.check('/tmp/a.jpg'), FaceCheckResult.ok);
+  });
+
+  test('a face just below the 5% area threshold does not count', () async {
+    final checker = FaceChecker(
+      detectionSource: _FakeDetectionSource([const Rect.fromLTWH(0, 0, 250, 199)]), // 49,750 / 1,000,000 = 4.975%
+      sizeReader: _FakeSizeReader(imageSize),
+    );
+    expect(await checker.check('/tmp/a.jpg'), FaceCheckResult.noFace);
+  });
 }

@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 enum FaceCheckResult { ok, noFace, multipleFaces }
@@ -40,6 +39,7 @@ class UiImageSizeReader implements ImageSizeReader {
     final frame = await codec.getNextFrame();
     final size = Size(frame.image.width.toDouble(), frame.image.height.toDouble());
     frame.image.dispose();
+    codec.dispose();
     return size;
   }
 }
