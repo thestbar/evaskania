@@ -6,8 +6,9 @@ import '../widgets/app_buttons.dart';
 import '../widgets/image_slot.dart';
 
 class XemFormScreen extends StatefulWidget {
-  const XemFormScreen({super.key, required this.controller});
+  const XemFormScreen({super.key, required this.controller, this.pickImage = defaultPickImage});
   final AppStateController controller;
+  final ImagePickFn pickImage;
 
   @override
   State<XemFormScreen> createState() => _XemFormScreenState();
@@ -59,6 +60,7 @@ class _XemFormScreenState extends State<XemFormScreen> {
             imagePath: controller.xemPhotoPath,
             onImagePicked: controller.setXemPhoto,
             height: 220,
+            pickImage: widget.pickImage,
           ),
           const SizedBox(height: AppTokens.space6),
           PrimaryButton(

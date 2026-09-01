@@ -6,8 +6,9 @@ import '../widgets/app_buttons.dart';
 import '../widgets/image_slot.dart';
 
 class CoffeeFormScreen extends StatelessWidget {
-  const CoffeeFormScreen({super.key, required this.controller});
+  const CoffeeFormScreen({super.key, required this.controller, this.pickImage = defaultPickImage});
   final AppStateController controller;
+  final ImagePickFn pickImage;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +36,7 @@ class CoffeeFormScreen extends StatelessWidget {
             imagePath: controller.coffeePhotoPath,
             onImagePicked: controller.setCoffeePhoto,
             height: 260,
+            pickImage: pickImage,
           ),
           const SizedBox(height: AppTokens.space6),
           PrimaryButton(
