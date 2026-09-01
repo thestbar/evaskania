@@ -4,16 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../data/afflictions.dart';
 import '../data/coffee_verdicts.dart';
+import '../detection/cup_checker.dart';
 import '../detection/face_checker.dart';
 import 'app_screen.dart';
 
 class AppStateController extends ChangeNotifier {
-  AppStateController({Random? random, FaceChecker? faceChecker})
+  AppStateController({Random? random, FaceChecker? faceChecker, CupChecker? cupChecker})
       : _random = random ?? Random(),
-        _faceChecker = faceChecker ?? FaceChecker();
+        _faceChecker = faceChecker ?? FaceChecker(),
+        _cupChecker = cupChecker ?? CupChecker();
 
   final Random _random;
   final FaceChecker _faceChecker;
+  final CupChecker _cupChecker;
   Timer? _xemTimer;
   Timer? _revealTimer;
 
@@ -109,6 +112,17 @@ class AppStateController extends ChangeNotifier {
     final total = affliction.startPct;
     const totalDurationMs = 1800;
     const tickMs = 60;
+    // Progress is driven by counting periodic-timer ticks rather than reading
+    // DateTime.now(): flutter_test's FakeAsync zone fakes Timer/Future but has
+    // no hook to fake the wall clock, so a DateTime.now()-based elapsed-time
+    // calculation never advances under tester.pump() (see the A5 report for
+    // the bug this replaced). The trade-off: progress now tracks how many
+    // times the periodic timer actually fires, not true wall-clock elapsed
+    // time, so OS timer throttling/coalescing (e.g. app backgrounded then
+    // resumed) could stretch this past 1800ms of real time, unlike a
+    // wall-clock approach which would self-correct. Acceptable here since
+    // this is a decorative, low-stakes loading animation — don't revert to
+    // DateTime.now() without understanding why it was changed.
     var ticks = 0;
     _xemTimer?.cancel();
     _revealTimer?.cancel();
@@ -134,6 +148,13 @@ class AppStateController extends ChangeNotifier {
     if (coffeePhotoPath == null) return;
     screen = AppScreen.coffeeLoading;
     notifyListeners();
+
+    final result = await _cupChecker.check(coffeePhotoPath!);
+    if (result != CupCheckResult.ok) {
+      screen = AppScreen.coffeeRejected;
+      notifyListeners();
+      return;
+    }
 
     await Future.delayed(const Duration(milliseconds: 2200));
     coffeeResult = coffeeVerdicts[_random.nextInt(coffeeVerdicts.length)];

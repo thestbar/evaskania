@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:evaskania/detection/cup_checker.dart';
 import 'package:evaskania/detection/face_checker.dart';
 import 'package:evaskania/screens/app_shell.dart';
 import 'package:evaskania/state/app_state_controller.dart';
@@ -19,7 +20,14 @@ class _FixedSize implements ImageSizeReader {
   Future<Size> readSize(String imagePath) async => const Size(1000, 1000);
 }
 
+class _CupLabel implements ImageLabelSource {
+  @override
+  Future<List<MapEntry<String, double>>> labelImage(String imagePath) async =>
+      [const MapEntry('Cup', 0.9)];
+}
+
 FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeReader: _FixedSize());
+CupChecker _okCupChecker() => CupChecker(labelSource: _CupLabel());
 
 void main() {
   setUpAll(() async {
@@ -71,7 +79,7 @@ void main() {
 
   testWidgets('full Ο Καφές flow: home -> form -> pick -> submit -> result -> home',
       (tester) async {
-    final controller = AppStateController(faceChecker: _okFaceChecker());
+    final controller = AppStateController(cupChecker: _okCupChecker());
     await tester.pumpWidget(
       MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
     );
@@ -88,6 +96,7 @@ void main() {
     await tester.pump();
     expect(find.text('Η γιαγιά διαβάζει…'), findsOneWidget);
 
+    await tester.pump(); // the cup check itself resolves on a microtask
     await tester.pump(const Duration(milliseconds: 2200));
     expect(find.text('Διάβασε άλλο φλιτζάνι'), findsOneWidget);
 
