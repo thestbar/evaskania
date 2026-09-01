@@ -1950,12 +1950,17 @@ Create `app/test/screens/app_shell_test.dart`:
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:evaskania/screens/app_shell.dart';
 import 'package:evaskania/state/app_state_controller.dart';
 
 Future<String?> _fakePick(ImageSource source) async => '/tmp/fake.jpg';
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('el', null);
+  });
+
   testWidgets('home shows the masthead and both ritual cards', (tester) async {
     final controller = AppStateController();
     await tester.pumpWidget(
@@ -2939,6 +2944,7 @@ Its Ξεμάτιασμα flow test taps through to `submitXem`, which now awaits
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:evaskania/detection/face_checker.dart';
 import 'package:evaskania/screens/app_shell.dart';
 import 'package:evaskania/state/app_state_controller.dart';
@@ -2959,6 +2965,10 @@ class _FixedSize implements ImageSizeReader {
 FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeReader: _FixedSize());
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('el', null);
+  });
+
   testWidgets('home shows the masthead and both ritual cards', (tester) async {
     final controller = AppStateController();
     await tester.pumpWidget(
@@ -3768,6 +3778,7 @@ Its Ο Καφές flow test taps through to `submitCoffee`, which now awaits a r
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:evaskania/detection/cup_checker.dart';
 import 'package:evaskania/detection/face_checker.dart';
 import 'package:evaskania/screens/app_shell.dart';
@@ -3796,6 +3807,10 @@ FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeRea
 CupChecker _okCupChecker() => CupChecker(labelSource: _CupLabel());
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('el', null);
+  });
+
   testWidgets('home shows the masthead and both ritual cards', (tester) async {
     final controller = AppStateController();
     await tester.pumpWidget(
