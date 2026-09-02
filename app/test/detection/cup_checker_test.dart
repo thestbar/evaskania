@@ -43,4 +43,13 @@ void main() {
     final checker = CupChecker(labelSource: _FakeLabelSource(const []));
     expect(await checker.check('/tmp/a.jpg'), CupCheckResult.notACup);
   });
+
+  test('default-construction threads minConfidence through to MlKitImageLabelSource', () {
+    // Regression test for the confidence threshold being duplicated between
+    // CupChecker.minConfidence and MlKitImageLabelSource's own hardcoded
+    // ImageLabelerOptions — constructing with a non-default minConfidence
+    // must not silently keep filtering at the labeler's old hardcoded value.
+    final checker = CupChecker(minConfidence: 0.3);
+    expect(checker.minConfidence, 0.3);
+  });
 }

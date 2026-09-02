@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 
-TextStyle get _buttonTextStyle => const TextStyle(
-      fontFamily: kHeadingFontFamily,
-      fontVariations: kHeadingWeight,
-      fontSize: 14,
-    );
+const TextStyle _buttonTextStyle = TextStyle(
+  fontFamily: kHeadingFontFamily,
+  fontVariations: kHeadingWeight,
+  fontSize: 14,
+);
 
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({super.key, required this.label, required this.onPressed});

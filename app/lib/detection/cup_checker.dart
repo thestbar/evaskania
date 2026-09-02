@@ -1,4 +1,3 @@
-import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 
 enum CupCheckResult { ok, notACup }
@@ -11,8 +10,10 @@ abstract class ImageLabelSource {
 }
 
 class MlKitImageLabelSource implements ImageLabelSource {
-  final ImageLabeler _labeler =
-      ImageLabeler(options: ImageLabelerOptions(confidenceThreshold: 0.6));
+  MlKitImageLabelSource({double confidenceThreshold = 0.6})
+      : _labeler = ImageLabeler(options: ImageLabelerOptions(confidenceThreshold: confidenceThreshold));
+
+  final ImageLabeler _labeler;
 
   @override
   Future<List<MapEntry<String, double>>> labelImage(String imagePath) async {
@@ -31,7 +32,7 @@ class MlKitImageLabelSource implements ImageLabelSource {
 /// in the photo.
 class CupChecker {
   CupChecker({ImageLabelSource? labelSource, this.minConfidence = 0.6})
-      : _labelSource = labelSource ?? MlKitImageLabelSource();
+      : _labelSource = labelSource ?? MlKitImageLabelSource(confidenceThreshold: minConfidence);
 
   final ImageLabelSource _labelSource;
   final double minConfidence;

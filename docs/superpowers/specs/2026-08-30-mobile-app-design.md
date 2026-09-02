@@ -33,8 +33,9 @@ image validation:
 
 **Known trade-offs, accepted for v1:**
 - Bundling on-device ML models adds meaningful app size (tens of MB).
-- Android face detection requires Google Play Services (present on effectively all
-  real Android devices; not on Play-Services-less forks — not designed around).
+- Android face detection uses ML Kit's bundled (not Play Services-linked) face-detection
+  artifact — the model ships inside the APK itself, so no Google Play Services
+  dependency is required at runtime.
 - The checks are deliberately coarse ("is there a face," "is there a cup-shaped
   object"), not a verification of ritual-specific detail (e.g. the coffee check can't
   confirm the cup is empty or that grounds are visible on the walls — no pretrained
