@@ -23,7 +23,7 @@ class HomeScreen extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('ΤΕΎΧΟΣ ΤΣΈΠΗΣ',
+                Text('ΤΕΥΧΟΣ ΤΣΕΠΗΣ',
                     style: TextStyle(
                         fontSize: 10, letterSpacing: 1.4, color: AppTokens.colorText.withValues(alpha: 0.6))),
                 Text(controller.today,
@@ -41,8 +41,7 @@ class HomeScreen extends StatelessWidget {
                   color: AppTokens.colorText)),
           const SizedBox(height: AppTokens.space2),
           Text(
-            'Δύο τελετουργίες τσέπης: διώξε το μάτι, διάβασε τον καφέ. '
-            'Για πλάκα, με τους φίλους σου.',
+            'Δύο τελετουργίες τσέπης: διώξε το μάτι, διάβασε τον καφέ.',
             style: TextStyle(fontSize: 14, height: 1.5, color: AppTokens.colorText.withValues(alpha: 0.75)),
           ),
           const SizedBox(height: AppTokens.space4),
