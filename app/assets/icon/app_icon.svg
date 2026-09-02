@@ -1,0 +1,48 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#0088b0"/>
+
+  <!-- Headscarf silhouette (drawn behind the face) -->
+  <path d="M 512 168
+           C 366 168 248 292 236 448
+           C 232 500 244 552 270 596
+           L 246 690
+           C 244 718 268 738 292 726
+           L 350 696
+           C 380 706 412 712 446 714
+           L 446 560
+           C 446 500 474 452 512 452
+           C 550 452 578 500 578 560
+           L 578 714
+           C 612 712 644 706 674 696
+           L 732 726
+           C 756 738 780 718 778 690
+           L 754 596
+           C 780 552 792 500 788 448
+           C 776 292 658 168 512 168 Z"
+        fill="#d6006c"/>
+
+  <!-- Face -->
+  <ellipse cx="512" cy="520" rx="176" ry="196" fill="#f8f4f4"/>
+
+  <!-- Closed, gentle eyes -->
+  <path d="M 432 512 Q 460 496 488 512" stroke="#201e1d" stroke-width="13" fill="none" stroke-linecap="round"/>
+  <path d="M 536 512 Q 564 496 592 512" stroke="#201e1d" stroke-width="13" fill="none" stroke-linecap="round"/>
+
+  <!-- Hooked nose -->
+  <path d="M 512 522 C 506 556 498 582 482 600 C 496 610 516 610 528 600"
+        stroke="#201e1d" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Small knowing smile -->
+  <path d="M 466 640 Q 512 664 558 640" stroke="#201e1d" stroke-width="12" fill="none" stroke-linecap="round"/>
+
+  <!-- Rosy cheeks -->
+  <circle cx="418" cy="580" r="20" fill="#d6006c" opacity="0.35"/>
+  <circle cx="606" cy="580" r="20" fill="#d6006c" opacity="0.35"/>
+
+  <!-- Evil-eye pendant, at the collar -->
+  <circle cx="512" cy="800" r="44" fill="#f3f2f2" stroke="#201e1d" stroke-width="6"/>
+  <circle cx="512" cy="800" r="29" fill="#0088b0"/>
+  <circle cx="512" cy="800" r="14" fill="#f3f2f2"/>
+  <circle cx="512" cy="800" r="6" fill="#201e1d"/>
+</svg>
