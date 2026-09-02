@@ -7,3 +7,9 @@ app/ios/Pods/
 app/ios/.symlinks/
 app/android/.gradle/
 .DS_Store
+
+# Claude Design (.dc) mockup export — superseded by the app/ Flutter build
+_ds/
+*.dc.html
+support.js
+image-slot.js
