@@ -22,7 +22,8 @@ class XemLoadingScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppTokens.space4),
           const Text('Η γιαγιά συγκεντρώνεται…',
-              style: TextStyle(fontFamily: kHeadingFontFamily, fontSize: 15)),
+              style: TextStyle(
+                  fontFamily: kHeadingFontFamily, fontVariations: kHeadingWeight, fontSize: 15)),
           const SizedBox(height: 6),
           Text('τρεις σταγόνες λάδι στο νερό',
               style: TextStyle(fontSize: 12, color: AppTokens.colorText.withValues(alpha: 0.55))),

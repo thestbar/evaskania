@@ -34,7 +34,11 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: AppTokens.space3),
           const Text('e-ΒΑΣΚΑΝΙΑ',
               style: TextStyle(
-                  fontFamily: kHeadingFontFamily, fontSize: 40, height: 0.95, color: AppTokens.colorText)),
+                  fontFamily: kHeadingFontFamily,
+                  fontVariations: kHeadingWeight,
+                  fontSize: 40,
+                  height: 0.95,
+                  color: AppTokens.colorText)),
           const SizedBox(height: AppTokens.space2),
           Text(
             'Δύο τελετουργίες τσέπης: διώξε το μάτι, διάβασε τον καφέ. '

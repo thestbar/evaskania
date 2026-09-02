@@ -41,7 +41,8 @@ class _XemFormScreenState extends State<XemFormScreen> {
               ),
               const SizedBox(width: AppTokens.space2),
               const Text('Ξεμάτιασμα',
-                  style: TextStyle(fontFamily: kHeadingFontFamily, fontSize: 20)),
+                  style: TextStyle(
+                      fontFamily: kHeadingFontFamily, fontVariations: kHeadingWeight, fontSize: 20)),
             ],
           ),
           const SizedBox(height: AppTokens.space4),

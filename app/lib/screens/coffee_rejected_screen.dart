@@ -11,7 +11,7 @@ class CoffeeRejectedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTokens.space4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -20,7 +20,9 @@ class CoffeeRejectedScreen extends StatelessWidget {
             children: [
               GhostIconButton(icon: Icons.arrow_back, semanticLabel: 'Πίσω', onPressed: controller.goHome),
               const SizedBox(width: AppTokens.space2),
-              const Text('Ο Καφές', style: TextStyle(fontFamily: kHeadingFontFamily, fontSize: 20)),
+              const Text('Ο Καφές',
+                  style: TextStyle(
+                      fontFamily: kHeadingFontFamily, fontVariations: kHeadingWeight, fontSize: 20)),
             ],
           ),
           const SizedBox(height: AppTokens.space3),

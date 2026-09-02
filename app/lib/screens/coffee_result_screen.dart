@@ -25,7 +25,9 @@ class CoffeeResultScreen extends StatelessWidget {
                 onPressed: controller.goHome,
               ),
               const SizedBox(width: AppTokens.space2),
-              const Text('Η ανάγνωση', style: TextStyle(fontFamily: kHeadingFontFamily, fontSize: 20)),
+              const Text('Η ανάγνωση',
+                  style: TextStyle(
+                      fontFamily: kHeadingFontFamily, fontVariations: kHeadingWeight, fontSize: 20)),
             ],
           ),
           const SizedBox(height: AppTokens.space3),

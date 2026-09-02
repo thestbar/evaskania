@@ -10,13 +10,14 @@ class XemRemovingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTokens.space4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Ξεμάτιασμα',
-              style: TextStyle(fontFamily: kHeadingFontFamily, fontSize: 20)),
+              style: TextStyle(
+                  fontFamily: kHeadingFontFamily, fontVariations: kHeadingWeight, fontSize: 20)),
           const SizedBox(height: AppTokens.space3),
           AppCard(
             children: [
@@ -33,12 +34,12 @@ class XemRemovingScreen extends StatelessWidget {
                       style: const TextStyle(
                         fontFamily: kHeadingFontFamily,
                         fontSize: 52,
-                        fontWeight: FontWeight.w600,
+                        fontVariations: kHeadingWeight,
                         color: AppTokens.accent700,
                       ),
                     ),
                     Text(
-                      'δείκτης βασκανίας — φεύγει',
+                      'δείκτης βασκανίας — φεύγει'.toUpperCase(),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 11,

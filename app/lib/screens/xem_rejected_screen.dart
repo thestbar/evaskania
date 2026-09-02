@@ -13,7 +13,7 @@ class XemRejectedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMultiple = controller.xemRejectionReason == XemRejectionReason.multipleFaces;
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(AppTokens.space4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -22,7 +22,9 @@ class XemRejectedScreen extends StatelessWidget {
             children: [
               GhostIconButton(icon: Icons.arrow_back, semanticLabel: 'Πίσω', onPressed: controller.goHome),
               const SizedBox(width: AppTokens.space2),
-              const Text('Ξεμάτιασμα', style: TextStyle(fontFamily: kHeadingFontFamily, fontSize: 20)),
+              const Text('Ξεμάτιασμα',
+                  style: TextStyle(
+                      fontFamily: kHeadingFontFamily, fontVariations: kHeadingWeight, fontSize: 20)),
             ],
           ),
           const SizedBox(height: AppTokens.space3),

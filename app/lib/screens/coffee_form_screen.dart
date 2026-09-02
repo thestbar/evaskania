@@ -25,7 +25,9 @@ class CoffeeFormScreen extends StatelessWidget {
                 onPressed: controller.goHome,
               ),
               const SizedBox(width: AppTokens.space2),
-              const Text('Ο Καφές', style: TextStyle(fontFamily: kHeadingFontFamily, fontSize: 20)),
+              const Text('Ο Καφές',
+                  style: TextStyle(
+                      fontFamily: kHeadingFontFamily, fontVariations: kHeadingWeight, fontSize: 20)),
             ],
           ),
           const SizedBox(height: AppTokens.space4),
