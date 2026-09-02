@@ -3,14 +3,29 @@
 // FaceDetectionSource/ImageLabelSource and never touch a platform channel.
 //
 // Added after a real-device bug report ("every photo gets rejected, no
-// matter what I pick"): ML Kit's on-device face detector turned out to
-// reliably miss faces cropped tight to the frame edges — a close-up,
-// edge-to-edge photo is a completely natural way to frame "a face," and
-// this app's own instructions encourage getting close. face_edge_to_edge.jpg
-// is that exact failing case; MlKitFaceDetectionSource now pads the image
-// before detecting to work around it (see face_checker.dart). Run with:
+// matter what I pick"), which turned out to be TWO separate bugs:
 //
-//   flutter test integration_test/detection_regression_test.dart -d <device>
+// 1. ML Kit's on-device face detector reliably misses faces cropped tight
+//    to the frame edges — a close-up, edge-to-edge photo is a completely
+//    natural way to frame "a face," and this app's own instructions
+//    encourage getting close. face_edge_to_edge.jpg is that exact failing
+//    case; MlKitFaceDetectionSource now pads the image before detecting to
+//    work around it (see face_checker.dart).
+//
+// 2. On a real, current-Google-Play-Services device, the RELEASE (R8
+//    minified) build crashed with a NullPointerException deep inside
+//    com.google.android.gms.internal.mlkit_vision_common — the
+//    face-detection AAR's own bundled consumer ProGuard rules don't cover
+//    it. This never reproduced in a debug build, or on an emulator with an
+//    older bundled Play Services version, which is why it slipped through
+//    the first round of testing. Fixed in
+//    android/app/proguard-rules.pro. Because of this, running this suite
+//    ONLY in debug mode is not enough to catch a regression here — run it
+//    both ways:
+//
+//   flutter test integration_test/detection_regression_test.dart -d <device>          # debug
+//   flutter drive --driver=test_driver/integration_test.dart \
+//     --target=integration_test/detection_regression_test.dart -d <device> --profile  # minified, like release
 import 'dart:io';
 
 import 'package:flutter/services.dart' show rootBundle;
