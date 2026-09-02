@@ -34,16 +34,27 @@ Flutter · Dart · Google ML Kit (face detection + image labeling, both on-devic
 
 ```bash
 cd app
-flutter test                                                        # unit + widget tests
-flutter test integration_test/detection_regression_test.dart -d <device>  # real ML Kit, on a device/emulator
+flutter test                                                                  # unit + widget tests
+
+# real ML Kit, on a device/emulator — run BOTH, they catch different bugs:
+flutter test integration_test/detection_regression_test.dart -d <device>            # debug
+flutter drive --driver=test_driver/integration_test.dart \
+  --target=integration_test/detection_regression_test.dart -d <device> --profile    # minified, like release
 ```
 
 The unit tests fake out ML Kit (platform channels don't work in `flutter
 test`'s headless mode), so they can't catch platform-level regressions —
-that's what the integration test is for. It exists because of a real bug:
-ML Kit's face detector reliably missed faces cropped tight to the frame
-edges, which made every close-up photo get rejected on a real phone. See
-`app/lib/detection/face_checker.dart` for the fix.
+that's what the integration tests are for. Two real bugs made every photo
+get rejected on a real phone, and each needed a different one of the two
+runs above to catch:
+
+- ML Kit's face detector reliably missed faces cropped tight to the frame
+  edges (the **debug** run catches this) — fixed in
+  `app/lib/detection/face_checker.dart`.
+- The **release/minified** build crashed inside Google Play Services' ML
+  Kit glue — the plugin's own ProGuard rules don't cover it (only the
+  **profile** run, which is minified the same way release is, catches
+  this) — fixed in `app/android/app/proguard-rules.pro`.
 
 ## Docs
 
