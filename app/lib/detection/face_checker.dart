@@ -35,11 +35,11 @@ class UiImageSizeReader implements ImageSizeReader {
   @override
   Future<Size> readSize(String imagePath) async {
     final bytes = await File(imagePath).readAsBytes();
-    final codec = await instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    final size = Size(frame.image.width.toDouble(), frame.image.height.toDouble());
-    frame.image.dispose();
-    codec.dispose();
+    final buffer = await ImmutableBuffer.fromUint8List(bytes);
+    final descriptor = await ImageDescriptor.encoded(buffer);
+    final size = Size(descriptor.width.toDouble(), descriptor.height.toDouble());
+    descriptor.dispose();
+    buffer.dispose();
     return size;
   }
 }
@@ -62,6 +62,8 @@ class FaceChecker {
 
   Future<FaceCheckResult> check(String imagePath) async {
     final boxes = await _detectionSource.detectFaceBoxes(imagePath);
+    if (boxes.isEmpty) return FaceCheckResult.noFace;
+
     final imageSize = await _sizeReader.readSize(imagePath);
     final imageArea = imageSize.width * imageSize.height;
 

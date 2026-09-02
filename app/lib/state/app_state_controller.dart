@@ -55,6 +55,8 @@ class AppStateController extends ChangeNotifier {
   }
 
   void goCoffeeForm() {
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     coffeePhotoPath = null;
     screen = AppScreen.coffeeForm;
     notifyListeners();
@@ -85,7 +87,12 @@ class AppStateController extends ChangeNotifier {
     screen = AppScreen.xemLoading;
     notifyListeners();
 
-    final result = await _faceChecker.check(xemPhotoPath!);
+    FaceCheckResult result;
+    try {
+      result = await _faceChecker.check(xemPhotoPath!);
+    } catch (_) {
+      result = FaceCheckResult.noFace;
+    }
     if (result != FaceCheckResult.ok) {
       xemRejectionReason = result == FaceCheckResult.noFace
           ? XemRejectionReason.noFace
@@ -149,7 +156,12 @@ class AppStateController extends ChangeNotifier {
     screen = AppScreen.coffeeLoading;
     notifyListeners();
 
-    final result = await _cupChecker.check(coffeePhotoPath!);
+    CupCheckResult result;
+    try {
+      result = await _cupChecker.check(coffeePhotoPath!);
+    } catch (_) {
+      result = CupCheckResult.notACup;
+    }
     if (result != CupCheckResult.ok) {
       screen = AppScreen.coffeeRejected;
       notifyListeners();
@@ -169,6 +181,8 @@ class AppStateController extends ChangeNotifier {
   void dispose() {
     _xemTimer?.cancel();
     _revealTimer?.cancel();
+    _faceChecker.dispose();
+    _cupChecker.dispose();
     super.dispose();
   }
 }

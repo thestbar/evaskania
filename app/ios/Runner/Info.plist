@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Η γιαγιά χρειάζεται τη φωτογραφία σου για το ξεμάτιασμα και το φλιτζάνι.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Διάλεξε φωτογραφία από τη βιβλιοθήκη σου για το ξεμάτιασμα ή τον καφέ.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

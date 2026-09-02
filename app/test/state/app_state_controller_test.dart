@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart' show Rect, Size;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:evaskania/detection/cup_checker.dart';
@@ -38,6 +39,12 @@ class _TwoFaces implements FaceDetectionSource {
       ];
 }
 
+class _ThrowingFaceDetection implements FaceDetectionSource {
+  @override
+  Future<List<Rect>> detectFaceBoxes(String imagePath) async =>
+      throw PlatformException(code: 'boom');
+}
+
 class _FixedSize implements ImageSizeReader {
   @override
   Future<Size> readSize(String imagePath) async => const Size(1000, 1000);
@@ -53,6 +60,12 @@ class _NoCupLabel implements ImageLabelSource {
   @override
   Future<List<MapEntry<String, double>>> labelImage(String imagePath) async =>
       [const MapEntry('Dog', 0.9)];
+}
+
+class _ThrowingImageLabel implements ImageLabelSource {
+  @override
+  Future<List<MapEntry<String, double>>> labelImage(String imagePath) async =>
+      throw PlatformException(code: 'boom');
 }
 
 FaceChecker _faceCheckerWith(FaceDetectionSource source) =>
@@ -132,6 +145,18 @@ void main() {
     expect(controller.xemRejectionReason, XemRejectionReason.multipleFaces);
   });
 
+  testWidgets('submitXem lands on xemRejected instead of stranding on xemLoading when the '
+      'checker throws', (tester) async {
+    final controller = buildController(faceSource: _ThrowingFaceDetection());
+    controller.setXemPhoto('/tmp/a.jpg');
+    unawaited(controller.submitXem());
+    expect(controller.screen, AppScreen.xemLoading);
+
+    await tester.pump();
+    expect(controller.screen, AppScreen.xemRejected);
+    expect(controller.xemRejectionReason, XemRejectionReason.noFace);
+  });
+
   testWidgets('displayName falls back to Κάποιον when name is blank', (tester) async {
     final controller = buildController();
     expect(controller.displayName, 'Κάποιον');
@@ -157,6 +182,17 @@ void main() {
     final controller = buildController(cupSource: _NoCupLabel());
     controller.setCoffeePhoto('/tmp/cup.jpg');
     unawaited(controller.submitCoffee());
+    await tester.pump();
+    expect(controller.screen, AppScreen.coffeeRejected);
+  });
+
+  testWidgets('submitCoffee lands on coffeeRejected instead of stranding on coffeeLoading when '
+      'the checker throws', (tester) async {
+    final controller = buildController(cupSource: _ThrowingImageLabel());
+    controller.setCoffeePhoto('/tmp/cup.jpg');
+    unawaited(controller.submitCoffee());
+    expect(controller.screen, AppScreen.coffeeLoading);
+
     await tester.pump();
     expect(controller.screen, AppScreen.coffeeRejected);
   });
