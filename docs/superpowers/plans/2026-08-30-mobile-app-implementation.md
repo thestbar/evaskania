@@ -966,6 +966,57 @@ void main() {
     expect(controller.screen, AppScreen.coffeeResult);
     expect(controller.coffeeResult, isNotNull);
   });
+
+  testWidgets('navigating home during the reveal delay does not snap back to xemResult',
+      (tester) async {
+    // Regression test: _startRemoval's periodic timer self-cancels once it
+    // completes, then schedules a separate 400ms reveal callback. Before
+    // this fix, that callback wasn't tracked/cancelable, so navigating away
+    // during that window still snapped `screen` back to xemResult later.
+    final controller = AppStateController(random: const FixedRandom());
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1800)); // periodic timer completes, reveal scheduled
+
+    controller.goHome(); // navigate away during the 400ms reveal window
+    await tester.pump(const Duration(milliseconds: 400)); // let any stray timer fire
+
+    expect(controller.screen, AppScreen.home);
+  });
+
+  testWidgets("a second submitXem call cancels a still-animating first call's timers",
+      (tester) async {
+    // Regression test: without cancelling _xemTimer/_revealTimer at the top
+    // of submitXem(), a first call's orphaned reveal timer could still fire
+    // later and resurrect its stale xemResult over a second, still-loading
+    // call's state.
+    final controller = AppStateController(random: const FixedRandom());
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem()); // call A
+    await tester.pump(const Duration(milliseconds: 1500)); // A reaches xemRemoving
+    await tester.pump(const Duration(milliseconds: 800)); // A is midway through removal
+
+    unawaited(controller.submitXem()); // call B, re-submits while A is still animating
+    expect(controller.screen, AppScreen.xemLoading);
+
+    // Advance past when A's now-cancelled reveal would have fired (had it
+    // not been cancelled) but before B's own 1500ms loading delay elapses.
+    await tester.pump(const Duration(milliseconds: 1450));
+    expect(controller.screen, AppScreen.xemLoading);
+
+    // Drain B's own remaining timers (the rest of its loading delay, its
+    // full removal animation, and its reveal delay) so no fake timers are
+    // left pending when the test body returns — AutomatedTestWidgetsFlutter
+    // Binding asserts !timersPending after every testWidgets body, and a
+    // bare, unreferenced Future.delayed's Timer stays registered in the
+    // FakeAsync zone until it actually fires.
+    await tester.pump(const Duration(milliseconds: 2300));
+  });
 }
 
 void unawaited(Future<void> future) {}
@@ -1087,6 +1138,7 @@ class AppStateController extends ChangeNotifier {
 
   final Random _random;
   Timer? _xemTimer;
+  Timer? _revealTimer;
 
   AppScreen screen = AppScreen.home;
   String name = '';
@@ -1108,12 +1160,14 @@ class AppStateController extends ChangeNotifier {
 
   void goHome() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.home;
     notifyListeners();
   }
 
   void goXemForm() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     xemPhotoPath = null;
     xemRejectionReason = null;
     screen = AppScreen.xemForm;
@@ -1143,6 +1197,11 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> submitXem() async {
     if (xemPhotoPath == null) return;
+    // A second submitXem() call while a first is still animating must not
+    // let the first call's orphaned timers resurrect its (stale) result
+    // over this call's state later — cancel them before proceeding.
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.xemLoading;
     notifyListeners();
 
@@ -1162,17 +1221,20 @@ class AppStateController extends ChangeNotifier {
 
     final total = affliction.startPct;
     const totalDurationMs = 1800;
-    final t0 = DateTime.now();
+    const tickMs = 60;
+    var ticks = 0;
     _xemTimer?.cancel();
-    _xemTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      final elapsedMs = DateTime.now().difference(t0).inMilliseconds;
+    _revealTimer?.cancel();
+    _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
+      ticks += 1;
+      final elapsedMs = ticks * tickMs;
       final frac = (elapsedMs / totalDurationMs).clamp(0.0, 1.0);
       xemPct = (total * (1 - frac)).round();
       dropsCleared = frac >= 0.999 ? 3 : (frac * 3).floor();
       notifyListeners();
       if (frac >= 1.0) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        _revealTimer = Timer(const Duration(milliseconds: 400), () {
           revealedAt = _formatNow();
           screen = AppScreen.xemResult;
           notifyListeners();
@@ -1198,6 +1260,7 @@ class AppStateController extends ChangeNotifier {
   @override
   void dispose() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 }
@@ -1206,7 +1269,7 @@ class AppStateController extends ChangeNotifier {
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `flutter test test/state/app_state_controller_test.dart`
-Expected: PASS (4 tests). This runs inside `testWidgets`'s fake-async zone, so `tester.pump(duration)` advances the controller's `Future.delayed`/`Timer.periodic` calls deterministically — no real wall-clock waiting.
+Expected: PASS (6 tests). This runs inside `testWidgets`'s fake-async zone, so `tester.pump(duration)` advances the controller's `Timer`/`Timer.periodic` calls deterministically — no real wall-clock waiting.
 
 - [ ] **Step 6: Commit**
 
@@ -1243,8 +1306,6 @@ import 'package:evaskania/screens/xem_removing_screen.dart';
 import 'package:evaskania/screens/xem_result_screen.dart';
 import 'package:evaskania/state/app_state_controller.dart';
 
-void unawaited(Future<void> future) {}
-
 void main() {
   testWidgets('XemFormScreen shows fields and a disabled button with no photo', (tester) async {
     final controller = AppStateController();
@@ -1276,24 +1337,29 @@ void main() {
   });
 
   testWidgets('XemRemovingScreen shows the affliction and percentage', (tester) async {
-    final controller = AppStateController()..setXemPhoto('/tmp/a.jpg');
-    unawaited(controller.submitXem());
-    await tester.pump(const Duration(milliseconds: 1500));
+    // Sets controller fields directly rather than driving them through
+    // submitXem()/a timer — this screen only reads current state, and this
+    // keeps the test decoupled from Tasks B2/C2's later changes to submitXem
+    // (which start awaiting a real detection check before this point).
+    final controller = AppStateController()
+      ..xemFound = 'Ελαφρύ ματάκι από ζήλια'
+      ..xemNote = 'Κάποιος ζήλεψε κάτι μικρό — τα μαλλιά σου, μάλλον.'
+      ..xemPct = 23;
 
     await tester.pumpWidget(MaterialApp(home: XemRemovingScreen(controller: controller)));
-    expect(find.text('Βρέθηκε'), findsOneWidget);
-    expect(find.text(controller.xemFound), findsOneWidget);
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
+    expect(find.text('Ελαφρύ ματάκι από ζήλια'), findsOneWidget);
     expect(find.textContaining('%'), findsWidgets);
   });
 
   testWidgets('XemResultScreen shows the display name and a retry button', (tester) async {
+    // Same rationale as above: set state directly instead of calling
+    // submitXem(), so this test stays valid after Tasks B2/C2.
     final controller = AppStateController()
-      ..setXemPhoto('/tmp/a.jpg')
-      ..setName('Μαρία');
-    unawaited(controller.submitXem());
-    await tester.pump(const Duration(milliseconds: 1500));
-    await tester.pump(const Duration(milliseconds: 1800));
-    await tester.pump(const Duration(milliseconds: 400));
+      ..setName('Μαρία')
+      ..xemFound = 'Βαρύ μάτι από σχόλιο'
+      ..xemStartPct = 78
+      ..revealedAt = '11:26 μ.μ.';
 
     await tester.pumpWidget(MaterialApp(home: XemResultScreen(controller: controller)));
     expect(find.textContaining('Μαρία, είσαι καθαρός/ή πια!'), findsOneWidget);
@@ -1633,9 +1699,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:evaskania/screens/coffee_form_screen.dart';
 import 'package:evaskania/screens/coffee_loading_screen.dart';
 import 'package:evaskania/screens/coffee_result_screen.dart';
+import 'package:evaskania/data/coffee_verdicts.dart';
 import 'package:evaskania/state/app_state_controller.dart';
-
-void unawaited(Future<void> future) {}
 
 void main() {
   testWidgets('CoffeeFormScreen shows the photo slot and a disabled button with no photo', (tester) async {
@@ -1660,16 +1725,20 @@ void main() {
   });
 
   testWidgets('CoffeeResultScreen shows the verdict symbols and quote', (tester) async {
-    final controller = AppStateController()..setCoffeePhoto('/tmp/cup.jpg');
-    unawaited(controller.submitCoffee());
-    await tester.pump(const Duration(milliseconds: 2200));
+    // Sets coffeeResult directly rather than driving it through
+    // submitCoffee() — this screen only reads current state, and this keeps
+    // the test decoupled from Task C2's later change to submitCoffee (which
+    // starts awaiting a real detection check before this point).
+    const verdict = CoffeeVerdict(symbols: ['Πουλί', 'Κουκκίδες'], quote: 'Δοκιμαστικό απόσπασμα.');
+    final controller = AppStateController()
+      ..coffeeResult = verdict
+      ..revealedAt = '11:26 μ.μ.';
 
     await tester.pumpWidget(MaterialApp(home: CoffeeResultScreen(controller: controller)));
-    final result = controller.coffeeResult!;
-    for (final symbol in result.symbols) {
+    for (final symbol in verdict.symbols) {
       expect(find.text(symbol), findsOneWidget);
     }
-    expect(find.textContaining(result.quote), findsOneWidget);
+    expect(find.textContaining(verdict.quote), findsOneWidget);
     expect(find.text('Διάβασε άλλο φλιτζάνι'), findsOneWidget);
   });
 }
@@ -1881,12 +1950,17 @@ Create `app/test/screens/app_shell_test.dart`:
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:evaskania/screens/app_shell.dart';
 import 'package:evaskania/state/app_state_controller.dart';
 
 Future<String?> _fakePick(ImageSource source) async => '/tmp/fake.jpg';
 
 void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('el', null);
+  });
+
   testWidgets('home shows the masthead and both ritual cards', (tester) async {
     final controller = AppStateController();
     await tester.pumpWidget(
@@ -1918,7 +1992,7 @@ void main() {
     expect(find.text('Η γιαγιά συγκεντρώνεται…'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 1500));
-    expect(find.text('Βρέθηκε'), findsOneWidget);
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
 
     await tester.pump(const Duration(milliseconds: 1800));
     await tester.pump(const Duration(milliseconds: 400));
@@ -2213,6 +2287,105 @@ git commit -m "Wire home screen, AppShell navigation, and main.dart (milestone A
 
 ---
 
+## Task A9: Fix iOS deployment target for ML Kit compatibility
+
+**Discovered during Task A8's Step 8 build check** (not anticipated when this plan was
+written): `flutter build ios --no-codesign --simulator` fails with
+
+```
+Error: The plugin "google_mlkit_commons" requires a higher minimum iOS deployment version
+than your application is targeting.
+To build, increase your application's deployment target to at least 15.5 as described at
+https://flutter.dev/to/ios-deploy
+Error running pod install
+```
+
+`google_mlkit_commons` was added to `pubspec.yaml` back in Task A1 (needed later by
+Tasks B1/C1), so this blocks the iOS build today even though no Dart code calls into ML
+Kit yet — it isn't specific to Milestone B/C's detection work, it blocks the base app.
+This must be fixed before Milestone B/C's tasks (which actually exercise these plugins)
+attempt an iOS build, and really before Milestone A can be called done for iOS, since the
+spec requires both platforms.
+
+**Files:**
+- Modify: `ios/Podfile`
+- Possibly modify: `ios/Runner.xcodeproj/project.pbxproj` (only if the Podfile change
+  alone doesn't clear the error — see Step 2)
+
+**Interfaces:** None — this is iOS project configuration, not Dart code. No public API
+changes; nothing downstream depends on anything from this task.
+
+- [ ] **Step 1: Read the current `ios/Podfile`**
+
+It was generated by `flutter create` in Task A1 and hasn't been touched since. Read it in
+full before editing so your changes merge with whatever's actually there (in particular,
+the existing `post_install do |installer| ... flutter_additional_ios_build_settings(target) ... end`
+block — don't remove that call, add to it).
+
+- [ ] **Step 2: Apply the deployment-target fix**
+
+Per `google_mlkit_face_detection`/`google_mlkit_image_labeling`/`google_mlkit_commons`'s
+own documented requirement (minimum iOS deployment target 15.5, and ML Kit doesn't
+support the 32-bit `armv7` architecture):
+
+1. Find the `platform :ios, 'X.X'` line (likely commented out, e.g.
+   `# platform :ios, '13.0'`). Uncomment it and set it to `platform :ios, '15.5'`.
+2. Add a `$iOSVersion = '15.5'` line near the top of the file (after the `platform` line).
+3. In the `post_install do |installer|` block, add (alongside the existing
+   `flutter_additional_ios_build_settings(target)` loop, not replacing it):
+   ```ruby
+   installer.pods_project.build_configurations.each do |config|
+     config.build_settings["EXCLUDED_ARCHS[sdk=*]"] = "armv7"
+     config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = $iOSVersion
+   end
+   ```
+   and, inside the existing `installer.pods_project.targets.each do |target|` loop (after
+   the `flutter_additional_ios_build_settings(target)` call already there):
+   ```ruby
+   target.build_configurations.each do |config|
+     if Gem::Version.new($iOSVersion) > Gem::Version.new(config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'])
+       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = $iOSVersion
+     end
+   end
+   ```
+
+- [ ] **Step 3: Rebuild and iterate against the real error**
+
+```bash
+cd app
+flutter build ios --no-codesign --simulator
+```
+
+If this now succeeds, skip to Step 4. If it still fails with the same or a similar
+deployment-target error, the app's own `Runner` target (not just the Pods project) likely
+also needs its deployment target bumped: open
+`ios/Runner.xcodeproj/project.pbxproj`, find every `IPHONEOS_DEPLOYMENT_TARGET = ...;`
+line (there are normally three — Debug/Release/Profile), and change each to `15.5`. Rerun
+the build command above. Keep iterating against the actual error output until the build
+succeeds — don't guess at further changes without a build error pointing at them.
+
+- [ ] **Step 4: Confirm nothing else regressed**
+
+```bash
+flutter build apk --debug
+flutter test
+flutter analyze
+```
+
+Expected: Android build still succeeds, full test suite still passes, analyzer still
+clean. None of this task's changes touch Dart code, so these are regression checks, not
+expected to surface anything new.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ios/Podfile
+# plus ios/Runner.xcodeproj/project.pbxproj if Step 3 needed it
+git commit -m "Fix iOS deployment target for ML Kit compatibility (min 15.5)"
+```
+
+---
+
 ## Task B1: `FaceChecker`
 
 **Files:**
@@ -2406,6 +2579,7 @@ git commit -m "Add FaceChecker with a fakeable detection/size-reading seam"
 - Create: `app/lib/screens/xem_rejected_screen.dart`
 - Test: `app/test/screens/xem_rejected_screen_test.dart`
 - Modify: `app/lib/screens/app_shell.dart` (route `AppScreen.xemRejected` to the new screen; `AppScreen.coffeeRejected` keeps using `_RejectedFallback` until Task C2)
+- Modify: `app/test/screens/app_shell_test.dart` (its Ξεμάτιασμα end-to-end test drives `submitXem` by tapping through the UI — it now needs a fake `FaceChecker` injected so it doesn't hit the real ML Kit platform channel)
 
 **Interfaces:**
 - Consumes: `FaceChecker`, `FaceCheckResult` (B1).
@@ -2549,6 +2723,49 @@ void main() {
     expect(controller.screen, AppScreen.coffeeResult);
     expect(controller.coffeeResult, isNotNull);
   });
+
+  testWidgets('navigating home during the reveal delay does not snap back to xemResult',
+      (tester) async {
+    final controller =
+        AppStateController(random: const FixedRandom(), faceChecker: _faceCheckerWith(_OneFace()));
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1800));
+
+    controller.goHome();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(controller.screen, AppScreen.home);
+  });
+
+  testWidgets("a second submitXem call cancels a still-animating first call's timers",
+      (tester) async {
+    final controller =
+        AppStateController(random: const FixedRandom(), faceChecker: _faceCheckerWith(_OneFace()));
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 800));
+
+    unawaited(controller.submitXem());
+    expect(controller.screen, AppScreen.xemLoading);
+
+    await tester.pump(const Duration(milliseconds: 1450));
+    expect(controller.screen, AppScreen.xemLoading);
+
+    // Drain B's own remaining timers (the rest of its loading delay, its
+    // full removal animation, and its reveal delay) so no fake timers are
+    // left pending when the test body returns — AutomatedTestWidgetsFlutter
+    // Binding asserts !timersPending after every testWidgets body, and a
+    // bare, unreferenced Future.delayed's Timer stays registered in the
+    // FakeAsync zone until it actually fires.
+    await tester.pump(const Duration(milliseconds: 2300));
+  });
 }
 ```
 
@@ -2610,6 +2827,7 @@ class AppStateController extends ChangeNotifier {
   final Random _random;
   final FaceChecker _faceChecker;
   Timer? _xemTimer;
+  Timer? _revealTimer;
 
   AppScreen screen = AppScreen.home;
   String name = '';
@@ -2631,12 +2849,14 @@ class AppStateController extends ChangeNotifier {
 
   void goHome() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.home;
     notifyListeners();
   }
 
   void goXemForm() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     xemPhotoPath = null;
     xemRejectionReason = null;
     screen = AppScreen.xemForm;
@@ -2666,6 +2886,11 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> submitXem() async {
     if (xemPhotoPath == null) return;
+    // A second submitXem() call while a first is still animating must not
+    // let the first call's orphaned timers resurrect its (stale) result
+    // over this call's state later — cancel them before proceeding.
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.xemLoading;
     notifyListeners();
 
@@ -2695,17 +2920,20 @@ class AppStateController extends ChangeNotifier {
 
     final total = affliction.startPct;
     const totalDurationMs = 1800;
-    final t0 = DateTime.now();
+    const tickMs = 60;
+    var ticks = 0;
     _xemTimer?.cancel();
-    _xemTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      final elapsedMs = DateTime.now().difference(t0).inMilliseconds;
+    _revealTimer?.cancel();
+    _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
+      ticks += 1;
+      final elapsedMs = ticks * tickMs;
       final frac = (elapsedMs / totalDurationMs).clamp(0.0, 1.0);
       xemPct = (total * (1 - frac)).round();
       dropsCleared = frac >= 0.999 ? 3 : (frac * 3).floor();
       notifyListeners();
       if (frac >= 1.0) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        _revealTimer = Timer(const Duration(milliseconds: 400), () {
           revealedAt = _formatNow();
           screen = AppScreen.xemResult;
           notifyListeners();
@@ -2731,6 +2959,7 @@ class AppStateController extends ChangeNotifier {
   @override
   void dispose() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 }
@@ -2806,20 +3035,127 @@ In `app/lib/screens/app_shell.dart`, add `import 'xem_rejected_screen.dart';` an
 
 (replacing the old single `AppScreen.xemRejected || AppScreen.coffeeRejected => _RejectedFallback(controller: controller),` line). `_RejectedFallback` stays for now — Task C2 replaces the `coffeeRejected` arm and then deletes `_RejectedFallback` entirely.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Modify `app_shell_test.dart`**
+
+Its Ξεμάτιασμα flow test taps through to `submitXem`, which now awaits a real `FaceChecker` by default — inject a fake so it doesn't hit the ML Kit platform channel. Replace the full contents of `app/test/screens/app_shell_test.dart` with:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:evaskania/detection/face_checker.dart';
+import 'package:evaskania/screens/app_shell.dart';
+import 'package:evaskania/state/app_state_controller.dart';
+
+Future<String?> _fakePick(ImageSource source) async => '/tmp/fake.jpg';
+
+class _OneFace implements FaceDetectionSource {
+  @override
+  Future<List<Rect>> detectFaceBoxes(String imagePath) async =>
+      [const Rect.fromLTWH(0, 0, 400, 400)];
+}
+
+class _FixedSize implements ImageSizeReader {
+  @override
+  Future<Size> readSize(String imagePath) async => const Size(1000, 1000);
+}
+
+FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeReader: _FixedSize());
+
+void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('el', null);
+  });
+
+  testWidgets('home shows the masthead and both ritual cards', (tester) async {
+    final controller = AppStateController();
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+    expect(find.text('Ξεμάτιασμα'), findsOneWidget);
+    expect(find.text('Ο Καφές'), findsOneWidget);
+  });
+
+  testWidgets('full Ξεμάτιασμα flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(faceChecker: _okFaceChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ξεμάτιασμα'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ρίξε τη φωτογραφία εδώ'), findsOneWidget);
+
+    await tester.tap(find.text('Ρίξε τη φωτογραφία εδώ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ξεκίνα το ξεμάτιασμα'));
+    await tester.pump();
+    expect(find.text('Η γιαγιά συγκεντρώνεται…'), findsOneWidget);
+
+    await tester.pump(); // the face check itself resolves on a microtask
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
+
+    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Ξεμάτιασε άλλον'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+
+  testWidgets('full Ο Καφές flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(faceChecker: _okFaceChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ο Καφές'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ανέβασε το γυρισμένο φλιτζάνι'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Δωσ' μου το φλιτζάνι"));
+    await tester.pump();
+    expect(find.text('Η γιαγιά διαβάζει…'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 2200));
+    expect(find.text('Διάβασε άλλο φλιτζάνι'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+}
+```
+
+(`Rect` and `Size` both come from `material.dart`'s re-export of `dart:ui`, same as in the `face_checker_test.dart` pattern from Task B1. The coffee flow test doesn't need a `cupChecker` override yet — `submitCoffee` doesn't call any checker until Task C2.)
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `flutter test`
-Expected: PASS — every test in the suite, including the modified controller tests and the new rejected-screen tests.
+Expected: PASS — every test in the suite, including the modified controller tests, the new rejected-screen tests, and the re-fitted `app_shell_test.dart`.
 
-- [ ] **Step 7: Static check**
+- [ ] **Step 8: Static check**
 
 Run: `flutter analyze`
 Expected: "No issues found!"
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/xem_rejected_screen.dart app/test/screens/xem_rejected_screen_test.dart app/lib/screens/app_shell.dart
+git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/xem_rejected_screen.dart app/test/screens/xem_rejected_screen_test.dart app/lib/screens/app_shell.dart app/test/screens/app_shell_test.dart
 git commit -m "Wire FaceChecker into Ξεμάτιασμα submit flow with rejection screen"
 ```
 
@@ -3012,6 +3348,7 @@ git commit -m "Add CupChecker using ML Kit image labeling"
 - Create: `app/lib/screens/coffee_rejected_screen.dart`
 - Test: `app/test/screens/coffee_rejected_screen_test.dart`
 - Modify: `app/lib/screens/app_shell.dart` (route `AppScreen.coffeeRejected` to the new screen; delete `_RejectedFallback`, now fully unused)
+- Modify: `app/test/screens/app_shell_test.dart` (its Ο Καφές end-to-end test drives `submitCoffee` by tapping through the UI — it now needs a fake `CupChecker` injected too, alongside the `FaceChecker` fake Task B2 already added)
 
 **Interfaces:**
 - Consumes: `CupChecker`, `CupCheckResult` (C1).
@@ -3184,6 +3521,47 @@ void main() {
     await tester.pump();
     expect(controller.screen, AppScreen.coffeeRejected);
   });
+
+  testWidgets('navigating home during the reveal delay does not snap back to xemResult',
+      (tester) async {
+    final controller = buildController();
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 1800));
+
+    controller.goHome();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(controller.screen, AppScreen.home);
+  });
+
+  testWidgets("a second submitXem call cancels a still-animating first call's timers",
+      (tester) async {
+    final controller = buildController();
+    controller.goXemForm();
+    controller.setXemPhoto('/tmp/a.jpg');
+
+    unawaited(controller.submitXem());
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 800));
+
+    unawaited(controller.submitXem());
+    expect(controller.screen, AppScreen.xemLoading);
+
+    await tester.pump(const Duration(milliseconds: 1450));
+    expect(controller.screen, AppScreen.xemLoading);
+
+    // Drain B's own remaining timers (the rest of its loading delay, its
+    // full removal animation, and its reveal delay) so no fake timers are
+    // left pending when the test body returns — AutomatedTestWidgetsFlutter
+    // Binding asserts !timersPending after every testWidgets body, and a
+    // bare, unreferenced Future.delayed's Timer stays registered in the
+    // FakeAsync zone until it actually fires.
+    await tester.pump(const Duration(milliseconds: 2300));
+  });
 }
 ```
 
@@ -3242,6 +3620,7 @@ class AppStateController extends ChangeNotifier {
   final FaceChecker _faceChecker;
   final CupChecker _cupChecker;
   Timer? _xemTimer;
+  Timer? _revealTimer;
 
   AppScreen screen = AppScreen.home;
   String name = '';
@@ -3263,12 +3642,14 @@ class AppStateController extends ChangeNotifier {
 
   void goHome() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.home;
     notifyListeners();
   }
 
   void goXemForm() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     xemPhotoPath = null;
     xemRejectionReason = null;
     screen = AppScreen.xemForm;
@@ -3298,6 +3679,11 @@ class AppStateController extends ChangeNotifier {
 
   Future<void> submitXem() async {
     if (xemPhotoPath == null) return;
+    // A second submitXem() call while a first is still animating must not
+    // let the first call's orphaned timers resurrect its (stale) result
+    // over this call's state later — cancel them before proceeding.
+    _xemTimer?.cancel();
+    _revealTimer?.cancel();
     screen = AppScreen.xemLoading;
     notifyListeners();
 
@@ -3327,17 +3713,31 @@ class AppStateController extends ChangeNotifier {
 
     final total = affliction.startPct;
     const totalDurationMs = 1800;
-    final t0 = DateTime.now();
+    const tickMs = 60;
+    // Progress is driven by counting periodic-timer ticks rather than reading
+    // DateTime.now(): flutter_test's FakeAsync zone fakes Timer/Future but has
+    // no hook to fake the wall clock, so a DateTime.now()-based elapsed-time
+    // calculation never advances under tester.pump() (see the A5 report for
+    // the bug this replaced). The trade-off: progress now tracks how many
+    // times the periodic timer actually fires, not true wall-clock elapsed
+    // time, so OS timer throttling/coalescing (e.g. app backgrounded then
+    // resumed) could stretch this past 1800ms of real time, unlike a
+    // wall-clock approach which would self-correct. Acceptable here since
+    // this is a decorative, low-stakes loading animation — don't revert to
+    // DateTime.now() without understanding why it was changed.
+    var ticks = 0;
     _xemTimer?.cancel();
-    _xemTimer = Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      final elapsedMs = DateTime.now().difference(t0).inMilliseconds;
+    _revealTimer?.cancel();
+    _xemTimer = Timer.periodic(const Duration(milliseconds: tickMs), (timer) {
+      ticks += 1;
+      final elapsedMs = ticks * tickMs;
       final frac = (elapsedMs / totalDurationMs).clamp(0.0, 1.0);
       xemPct = (total * (1 - frac)).round();
       dropsCleared = frac >= 0.999 ? 3 : (frac * 3).floor();
       notifyListeners();
       if (frac >= 1.0) {
         timer.cancel();
-        Future.delayed(const Duration(milliseconds: 400), () {
+        _revealTimer = Timer(const Duration(milliseconds: 400), () {
           revealedAt = _formatNow();
           screen = AppScreen.xemResult;
           notifyListeners();
@@ -3370,6 +3770,7 @@ class AppStateController extends ChangeNotifier {
   @override
   void dispose() {
     _xemTimer?.cancel();
+    _revealTimer?.cancel();
     super.dispose();
   }
 }
@@ -3479,12 +3880,126 @@ class AppShell extends StatelessWidget {
 
 (`_RejectedFallback` and the now-unused `app_buttons.dart` import are gone — every `AppScreen` case has its real screen.)
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Modify `app_shell_test.dart`**
+
+Its Ο Καφές flow test taps through to `submitCoffee`, which now awaits a real `CupChecker` by default — inject a fake, alongside the `FaceChecker` fake Task B2 already added. Replace the full contents of `app/test/screens/app_shell_test.dart` with:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:evaskania/detection/cup_checker.dart';
+import 'package:evaskania/detection/face_checker.dart';
+import 'package:evaskania/screens/app_shell.dart';
+import 'package:evaskania/state/app_state_controller.dart';
+
+Future<String?> _fakePick(ImageSource source) async => '/tmp/fake.jpg';
+
+class _OneFace implements FaceDetectionSource {
+  @override
+  Future<List<Rect>> detectFaceBoxes(String imagePath) async =>
+      [const Rect.fromLTWH(0, 0, 400, 400)];
+}
+
+class _FixedSize implements ImageSizeReader {
+  @override
+  Future<Size> readSize(String imagePath) async => const Size(1000, 1000);
+}
+
+class _CupLabel implements ImageLabelSource {
+  @override
+  Future<List<MapEntry<String, double>>> labelImage(String imagePath) async =>
+      [const MapEntry('Cup', 0.9)];
+}
+
+FaceChecker _okFaceChecker() => FaceChecker(detectionSource: _OneFace(), sizeReader: _FixedSize());
+CupChecker _okCupChecker() => CupChecker(labelSource: _CupLabel());
+
+void main() {
+  setUpAll(() async {
+    await initializeDateFormatting('el', null);
+  });
+
+  testWidgets('home shows the masthead and both ritual cards', (tester) async {
+    final controller = AppStateController();
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+    expect(find.text('Ξεμάτιασμα'), findsOneWidget);
+    expect(find.text('Ο Καφές'), findsOneWidget);
+  });
+
+  testWidgets('full Ξεμάτιασμα flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(faceChecker: _okFaceChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ξεμάτιασμα'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ρίξε τη φωτογραφία εδώ'), findsOneWidget);
+
+    await tester.tap(find.text('Ρίξε τη φωτογραφία εδώ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ξεκίνα το ξεμάτιασμα'));
+    await tester.pump();
+    expect(find.text('Η γιαγιά συγκεντρώνεται…'), findsOneWidget);
+
+    await tester.pump(); // the face check itself resolves on a microtask
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(find.text('ΒΡΈΘΗΚΕ'), findsOneWidget); // CardKicker (A3) uppercases its text
+
+    await tester.pump(const Duration(milliseconds: 1800));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Ξεμάτιασε άλλον'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+
+  testWidgets('full Ο Καφές flow: home -> form -> pick -> submit -> result -> home',
+      (tester) async {
+    final controller = AppStateController(cupChecker: _okCupChecker());
+    await tester.pumpWidget(
+      MaterialApp(home: AppShell(controller: controller, pickImage: _fakePick)),
+    );
+
+    await tester.tap(find.text('Ο Καφές'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Ανέβασε το γυρισμένο φλιτζάνι'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Βιβλιοθήκη φωτογραφιών'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text("Δωσ' μου το φλιτζάνι"));
+    await tester.pump();
+    expect(find.text('Η γιαγιά διαβάζει…'), findsOneWidget);
+
+    await tester.pump(); // the cup check itself resolves on a microtask
+    await tester.pump(const Duration(milliseconds: 2200));
+    expect(find.text('Διάβασε άλλο φλιτζάνι'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Αρχική'));
+    await tester.pumpAndSettle();
+    expect(find.text('e-ΒΑΣΚΑΝΙΑ'), findsOneWidget);
+  });
+}
+```
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `flutter test`
-Expected: PASS — the entire suite, including the modified controller tests and the new coffee-rejected screen tests.
+Expected: PASS — the entire suite, including the modified controller tests, the new coffee-rejected screen tests, and the re-fitted `app_shell_test.dart`.
 
-- [ ] **Step 7: Full static + build check**
+- [ ] **Step 8: Full static + build check**
 
 ```bash
 cd app
@@ -3495,10 +4010,10 @@ flutter build ios --no-codesign --simulator
 
 Expected: no analyzer issues, both builds succeed.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/coffee_rejected_screen.dart app/test/screens/coffee_rejected_screen_test.dart app/lib/screens/app_shell.dart
+git add app/lib/state/app_state_controller.dart app/test/state/app_state_controller_test.dart app/lib/screens/coffee_rejected_screen.dart app/test/screens/coffee_rejected_screen_test.dart app/lib/screens/app_shell.dart app/test/screens/app_shell_test.dart
 git commit -m "Wire CupChecker into Ο Καφές submit flow with rejection screen (milestone C complete)"
 ```
 
