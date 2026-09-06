@@ -103,20 +103,20 @@ class AppStateController extends ChangeNotifier {
     }
 
     await Future.delayed(const Duration(milliseconds: 1500));
-    final affliction = xemAfflictions[_random.nextInt(xemAfflictions.length)];
-    _startRemoval(affliction);
+    final rolled = rollXemAffliction(_random, avoidName: xemFound.isEmpty ? null : xemFound);
+    _startRemoval(rolled.affliction, rolled.pct);
   }
 
-  void _startRemoval(Affliction affliction) {
+  void _startRemoval(Affliction affliction, int pct) {
     xemFound = affliction.name;
     xemNote = affliction.note;
-    xemStartPct = affliction.startPct;
-    xemPct = affliction.startPct;
+    xemStartPct = pct;
+    xemPct = pct;
     dropsCleared = 0;
     screen = AppScreen.xemRemoving;
     notifyListeners();
 
-    final total = affliction.startPct;
+    final total = pct;
     const totalDurationMs = 1800;
     const tickMs = 60;
     // Progress is driven by counting periodic-timer ticks rather than reading
@@ -169,7 +169,7 @@ class AppStateController extends ChangeNotifier {
     }
 
     await Future.delayed(const Duration(milliseconds: 2200));
-    coffeeResult = coffeeVerdicts[_random.nextInt(coffeeVerdicts.length)];
+    coffeeResult = rollCoffeeVerdict(_random, avoid: coffeeResult);
     revealedAt = _formatNow();
     screen = AppScreen.coffeeResult;
     notifyListeners();

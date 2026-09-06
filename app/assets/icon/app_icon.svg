@@ -1,48 +1,35 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background -->
-  <rect width="1024" height="1024" fill="#0088b0"/>
+  <!-- Greek "mati" (evil-eye / nazar) charm, full-bleed like the emoji so it
+       stays legible down to a 16px favicon. Concentric rings on a navy glass
+       background, with a soft gloss highlight for depth. -->
+  <defs>
+    <radialGradient id="glass" cx="36%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#1c3f8f"/>
+      <stop offset="55%" stop-color="#122a68"/>
+      <stop offset="100%" stop-color="#0a1740"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="38%" cy="34%" r="70%">
+      <stop offset="0%" stop-color="#6fe0f7"/>
+      <stop offset="45%" stop-color="#2bb6e0"/>
+      <stop offset="100%" stop-color="#1489b8"/>
+    </radialGradient>
+  </defs>
 
-  <!-- Headscarf silhouette (drawn behind the face) -->
-  <path d="M 512 168
-           C 366 168 248 292 236 448
-           C 232 500 244 552 270 596
-           L 246 690
-           C 244 718 268 738 292 726
-           L 350 696
-           C 380 706 412 712 446 714
-           L 446 560
-           C 446 500 474 452 512 452
-           C 550 452 578 500 578 560
-           L 578 714
-           C 612 712 644 706 674 696
-           L 732 726
-           C 756 738 780 718 778 690
-           L 754 596
-           C 780 552 792 500 788 448
-           C 776 292 658 168 512 168 Z"
-        fill="#d6006c"/>
+  <rect width="1024" height="1024" fill="url(#glass)"/>
 
-  <!-- Face -->
-  <ellipse cx="512" cy="520" rx="176" ry="196" fill="#f8f4f4"/>
+  <!-- White ring -->
+  <circle cx="512" cy="512" r="340" fill="#f5f3ef"/>
 
-  <!-- Closed, gentle eyes -->
-  <path d="M 432 512 Q 460 496 488 512" stroke="#201e1d" stroke-width="13" fill="none" stroke-linecap="round"/>
-  <path d="M 536 512 Q 564 496 592 512" stroke="#201e1d" stroke-width="13" fill="none" stroke-linecap="round"/>
+  <!-- Iris -->
+  <circle cx="512" cy="512" r="232" fill="url(#iris)"/>
 
-  <!-- Hooked nose -->
-  <path d="M 512 522 C 506 556 498 582 482 600 C 496 610 516 610 528 600"
-        stroke="#201e1d" stroke-width="13" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Pupil -->
+  <circle cx="512" cy="512" r="96" fill="#14161c"/>
 
-  <!-- Small knowing smile -->
-  <path d="M 466 640 Q 512 664 558 640" stroke="#201e1d" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <!-- Pupil glint -->
+  <circle cx="478" cy="478" r="20" fill="#f5f3ef" opacity="0.85"/>
 
-  <!-- Rosy cheeks -->
-  <circle cx="418" cy="580" r="20" fill="#d6006c" opacity="0.35"/>
-  <circle cx="606" cy="580" r="20" fill="#d6006c" opacity="0.35"/>
-
-  <!-- Evil-eye pendant, at the collar -->
-  <circle cx="512" cy="800" r="44" fill="#f3f2f2" stroke="#201e1d" stroke-width="6"/>
-  <circle cx="512" cy="800" r="29" fill="#0088b0"/>
-  <circle cx="512" cy="800" r="14" fill="#f3f2f2"/>
-  <circle cx="512" cy="800" r="6" fill="#201e1d"/>
+  <!-- Glassy sheen across the whole charm -->
+  <ellipse cx="392" cy="330" rx="200" ry="120" fill="#ffffff" opacity="0.14"
+           transform="rotate(-28 392 330)"/>
 </svg>
